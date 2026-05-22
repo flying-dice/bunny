@@ -8,11 +8,24 @@ Install, write a controller, generate, serve. Five minutes.
 bun add @flying-dice/bunny
 ```
 
-Bunny is a peer of TypeScript ≥ 5. Bun ≥ 1.3 recommended (Bun's `routes` API is required for the generated `routes.ts`).
+Bunny is a peer of TypeScript ≥ 5. Bun ≥ 1.3 required (Bun's `routes` API is used by the generated `routes.ts`).
 
-## 1. Write a service
+## 1. Define an entity
 
-Tag the class `@provides <SelfName>`. Bunny instantiates it once at module load.
+A plain TypeScript interface. Used by both the service and the controller below.
+
+```ts
+// src/user.ts
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+}
+```
+
+## 2. Write a service
+
+Tag the class `@provides <Name>` — the token other classes will use to inject it. Bunny instantiates it once at module load.
 
 ```ts
 // src/users.service.ts
@@ -34,7 +47,7 @@ export class UsersService {
 }
 ```
 
-## 2. Write a controller
+## 3. Write a controller
 
 Tag the class `@controller`. Each method that should be a route gets an HTTP-verb tag (`@get`, `@post`, …) with the full path. `@inject` on the constructor's JSDoc pulls in services.
 
@@ -73,7 +86,9 @@ export class UsersController {
 }
 ```
 
-## 3. Generate
+[`TypedRequest`](./controllers.md#the-request) and [`JsonResponse`](./controllers.md#response-aliases) are typed wrappers around the standard Fetch `Request` / `Response`. `@tag users` groups the route in the OpenAPI spec — see [Controllers](./controllers.md#tags).
+
+## 4. Generate
 
 ```bash
 bunx @flying-dice/bunny -s 'src/**/*.ts' -o src/generated
@@ -96,7 +111,7 @@ export const _usersService = new UsersService();
 export const _usersController = new UsersController(_usersService);
 ```
 
-## 4. Serve
+## 5. Serve
 
 ```ts
 // src/server.ts
@@ -110,7 +125,7 @@ bun src/server.ts
 curl :3000/users
 ```
 
-## 5. Iterate
+## 6. Iterate
 
 Run the generator on every change (or wire it into a watch script):
 

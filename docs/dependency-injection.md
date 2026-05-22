@@ -40,6 +40,18 @@ bunny: Liar: @provides Repo — class does not implement, extend, or equal "Repo
   Add `implements Repo` (or rename the @provides token to match the class itself).
 ```
 
+**Multiple tokens.** A class may carry multiple `@provides` tags — each registers it under a separate token, useful when one impl satisfies several interfaces:
+
+```ts
+/**
+ * @provides ReadOnlyRepo
+ * @provides Repo
+ */
+export class InMemoryRepo implements Repo, ReadOnlyRepo { ... }
+```
+
+**Generic type parameters are ignored.** `@inject foo` against a parameter typed `Repo<Product>` resolves to `Repo`'s declaration — Bunny doesn't distinguish per-type-argument. If you need different impls per entity, write separate interfaces (`ProductRepo`, `UserRepo`) rather than generic parameters.
+
 ## How resolution works
 
 For every `@inject paramName`:
@@ -142,6 +154,8 @@ When the active profile is `"X"`:
 
 Two impls of the same interface under the same profile is still an error. Either give them distinct profiles, or restrict one to a non-current profile.
 
+**One `@profile` per service.** Multiple `@profile` tags on the same class error at generation time. Register the same impl under multiple profiles by writing thin subclasses (or duplicating the file), one per profile.
+
 ## Testing services
 
 Two options:
@@ -177,5 +191,8 @@ Use (A) for unit tests, (B) for integration tests that hit the whole app over HT
 | `no active service @provides <Token> under profile "<X>"`                      | Nothing matches. Forgot a `@provides`, or impl is restricted to another profile. |
 | `multiple services @provides <Token> under profile "<X>"`                      | Two candidates collide. Give one a distinct `@profile`.            |
 | `@inject parameter must have a named type annotation`                          | The constructor parameter's type isn't a class/interface reference. |
+| `@inject <name> doesn't match any constructor parameter (have: …)`             | The `@inject` directive names a parameter that doesn't exist. Typo.  |
+| `@inject on a constructor needs a parameter name (e.g. \`@inject users\`)`     | Bare `@inject` with no parameter name. Name the parameter.           |
 | `constructor parameter "x" is not annotated with @inject; every parameter must be @inject'd or none at all` | Partial wiring. Add the missing `@inject x`. |
+| `multiple @profile tags found — a service may declare at most one profile`     | Two or more `@profile` tags on one class. Pick one.                 |
 | `@inject dependency cycle: A → B → A`                                          | Break the cycle, or invert one dependency.                          |

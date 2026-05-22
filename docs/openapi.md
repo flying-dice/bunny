@@ -82,7 +82,17 @@ create(req: TypedRequest<{ body: User }, "application/xml">) { ... }
 
 ## Responses
 
-`TypedResponse<T, S?, C?>` brands the response with body, status, content-type. The generator reads all three.
+`TypedResponse<T, S?, C?>` brands the response with body, status, content-type. The generator reads all three. Response aliases lock in their content type by name:
+
+| Response alias                  | Default status | Media type                                       |
+| ------------------------------- | -------------- | ------------------------------------------------ |
+| `TypedResponse<T, S?, C?>`      | 200            | from `C` (defaults to `application/json`)        |
+| `JsonResponse<T, S?>`           | 200            | `application/json`                               |
+| `XmlResponse<T?, S?>`           | 200            | `application/xml`                                |
+| `TextResponse<S?>`              | 200            | `text/plain`                                     |
+| `HtmlResponse<S?>`              | 200            | `text/html`                                      |
+
+Each emitted status gets a default `description` from its IANA reason phrase (`200 → OK`, `201 → Created`, `204 → No Content`, `400 → Bad Request`, `404 → Not Found`, `500 → Internal Server Error`, …). To override, post-process the generated `openapi.json`, or merge fields under `base.paths` via the [Programmatic API](./programmatic-api.md).
 
 ```ts
 get(req: TypedRequest<{ params: { id: string } }>):

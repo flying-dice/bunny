@@ -26,6 +26,12 @@ No base path. The path on `@get` / `@post` / etc. is the full route. Bun's route
 
 One verb tag per method. The first one wins.
 
+**Edge cases:**
+
+- A method with no verb tag is ignored — it's not a route, just a method.
+- Static methods are ignored even with a verb tag (Bunny only walks `getInstanceMethods()`).
+- `@get` (or any verb) with no path falls back to `/`. Always state the path explicitly.
+
 ## Tags
 
 `@tag NAME` adds an OpenAPI tag. Multiple allowed per method.
@@ -41,7 +47,24 @@ list(_req: TypedRequest): JsonResponse<User[]> { ... }
 
 ## The request
 
-`TypedRequest<I, C?>` extends the standard Fetch `Request` with typed `params`, `query`, and `json()`. The runtime value *is* a real `Request` — Bunny attaches `params` / `query` as own-properties before the handler runs.
+```ts
+interface Input {
+  params?: Record<string, string>;
+  query?:  Record<string, unknown>;
+  body?:   unknown;
+}
+
+interface TypedRequest<
+  I extends Input = {},
+  C extends string = "application/json",
+> extends globalThis.Request {
+  readonly params: I extends { params: infer P } ? P : {};
+  readonly query:  I extends { query:  infer Q } ? Q : {};
+  json(): Promise<I extends { body: infer B } ? B : unknown>;
+}
+```
+
+`TypedRequest` extends the standard Fetch `Request` with typed `params`, `query`, and `json()`. The runtime value *is* a real `Request` — Bunny attaches `params` / `query` as own-properties before the handler runs. `C` declares the request body's media type (used by codegen for the OpenAPI `requestBody.content` key; not referenced at runtime).
 
 ```ts
 // path params
@@ -89,7 +112,19 @@ The alias name drives the OpenAPI `requestBody.content` key.
 
 ## The response
 
-`TypedResponse<T, S?, C?>` is a standard Fetch `Response` plus phantom `__body` / `__status` / `__contentType` brands. The codegen reads the brands to build the OpenAPI `responses` object.
+```ts
+type TypedResponse<
+  T = void,
+  S extends number = 200,
+  C extends string = "application/json",
+> = globalThis.Response & {
+  readonly __body?: T;
+  readonly __status?: S;
+  readonly __contentType?: C;
+};
+```
+
+`TypedResponse` is a standard Fetch `Response` plus phantom `__body` / `__status` / `__contentType` brands. The codegen reads the brands to build the OpenAPI `responses` object; the runtime value is just a `Response`.
 
 ```ts
 JsonResponse<User>                              // 200 application/json
@@ -120,13 +155,26 @@ get(req: TypedRequest<{ params: { id: string } }>):
 }
 ```
 
-Same-status union members merge into one response with multiple `content` entries — useful for content negotiation.
+Same-status union members merge into one response with multiple `content` entries — useful for content negotiation:
+
+```ts
+list(): JsonResponse<User[]> | XmlResponse<User[]> {
+  return Response.json([]);
+}
+```
+
+```yaml
+'200':
+  content:
+    application/json: { schema: { type: array, items: ... } }
+    application/xml:  { schema: { type: array, items: ... } }
+```
 
 `Promise<TypedResponse<...>>` is unwrapped automatically.
 
 ## Free-form summary
 
-JSDoc prose before the first `@tag` becomes the operation's `summary` in OpenAPI:
+JSDoc prose before the first JSDoc tag (any tag — `@get`, `@tag`, `@param`, …) becomes the operation's `summary` in OpenAPI:
 
 ```ts
 /**
@@ -158,7 +206,7 @@ The handler emitted into `routes.ts` is plain TypeScript wrapping your method:
 }
 ```
 
-`safeInvoke` and `applyValidation` come from `@flying-dice/bunny` (see [Validation](./validation.md#error-contract) for the resulting 400 / 500 contract).
+`safeInvoke` and `applyValidation` come from `@flying-dice/bunny` (see [Validation](./validation.md#error-contract) for the resulting 400 / 500 contract). `_usersController` is the singleton wired by [Dependency injection](./dependency-injection.md).
 
 ## Mixing in hand-written routes
 

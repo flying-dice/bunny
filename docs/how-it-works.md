@@ -33,9 +33,24 @@ Bunny is a codegen pipeline. No runtime reflection, no metadata, no decorators. 
         └───────────────┘               └────────────────┘
 ```
 
+## Why codegen, not runtime DI?
+
+The obvious alternative is what NestJS does: emit decorator metadata at TypeScript compile time, read it at boot, build a container at runtime. That model needs `reflect-metadata`, the `experimentalDecorators` compiler flag, and a runtime introspection layer for every binding.
+
+Bunny does the same work at *codegen time* and writes the result to disk. The trade is one build step in exchange for:
+
+- **Auditable output.** Every binding is visible in `app.ts`. No "what does the container actually do?" — the answer is the file.
+- **No decorator stage.** No `reflect-metadata`, no `experimentalDecorators`, no emit-decorator-metadata. Bunny's input is plain TS with JSDoc.
+- **One source of truth.** The same ts-morph walk drives the OpenAPI spec, the validators, and the wiring. They can't drift, because they all come from the same read.
+- **Tree-shakeable output.** `routes.ts` is plain TypeScript; bundlers see exactly what's used.
+
+The cost: a regeneration step when JSDoc changes. In practice that's a `bun --watch` away.
+
 ## 1. Load the project
 
 ts-morph loads every file matched by `--source`, plus their transitive dependencies (so pointing at controllers is enough — Bunny follows imports to find the services they refer to). Either a real `tsconfig.json` is honoured or ts-morph runs standalone with permissive defaults.
+
+ts-morph wraps the TypeScript compiler API with a navigable, mutable AST — cheaper than rolling our own visitor against `typescript` directly, and it gives us full type-checker access for resolving `implements` clauses and `@inject` parameter types to their declaration symbols.
 
 ## 2. Discover
 
@@ -96,38 +111,22 @@ Every instance is `export const _<camelCaseName>`. The leading `_` keeps it from
 
 ### `routes.ts` — handlers + validators
 
+A path-keyed `handlers` object plus one `assertX` function per named component and one `validate_<method>_<kind>` function per route input. Each handler is wrapped by `safeInvoke`, which calls `applyValidation` before the controller method, maps `RequestValidationError` → 400, and maps any other throw → 500.
+
 ```ts
-import type { BunRequest } from "bun";
-import { applyValidation, safeInvoke, AssertionError, FORMATS } from "@flying-dice/bunny";
-import { _productsController } from "./app.ts";
-
-// ---- Component validators ----
-function assertProductId(v: unknown, path: string): void { ... }
-function assertProduct(v: unknown, path: string): void { ... }
-
-// ---- Per-route validators ----
-function validate_getProduct_params(o: any) { assertProductId(o.id, ".id"); }
-function validate_createProduct_body(o: any)  { assertProduct(o, ""); }
-
 export const handlers = {
   "/products/:id": {
-    GET: (req: BunRequest) =>
+    GET: (req) =>
       safeInvoke(async () => {
-        const r = req as any;
-        r.query = Object.fromEntries(new URL(req.url).searchParams);
-        await applyValidation(r, { params: validate_getProduct_params });
-        return await _productsController.getProduct(r as ...);
+        // attach typed query, validate, invoke
       }),
   },
   ...
 };
-
 export default handlers;
 ```
 
-The validators are emitted as plain template-literal TypeScript — no Ajv, no Zod, no codegen DSL. One `assertX` function per named component, one `validate_<method>_<kind>` function per route input.
-
-`safeInvoke` wraps every handler. It maps `RequestValidationError` → 400 and any other throw → 500 — see [Validation](./validation.md#error-contract).
+Validators are plain template-literal TypeScript — no Ajv, no Zod, no codegen DSL. See [Validation](./validation.md) for the property vocabulary and the 400 / 500 contract. The full shape of a generated route is in [Controllers — What it looks like generated](./controllers.md#what-it-looks-like-generated).
 
 ## Static guarantees
 
@@ -151,10 +150,21 @@ The framework itself is small. Key files:
 | `src/internal/hoist.ts`           | "Is this type hoistable?" → `components/schemas`.                   |
 | `src/internal/route-types.ts`     | `TypedRequest<…>` generic extraction → `params` / `query` / `body`. |
 | `src/internal/path.ts`            | `:id` ↔ `{id}` and friends.                                         |
+| `src/internal/emit.ts`            | Small emission helpers (relative imports, identifier casing).       |
 | `src/generator.ts`                | OpenAPI 3.1 document assembly.                                      |
 | `src/bun.ts`                      | Two-file Bun.serve module emission.                                 |
 | `src/cli.ts`                      | Args + rc + glue.                                                   |
 | `src/runtime.ts`                  | `safeInvoke`, `applyValidation`, `FORMATS`.                         |
 | `src/http.ts`                     | `TypedRequest` / `TypedResponse` + aliases.                         |
 
-If you're contributing, those are the seven or eight files to know. Each is short (≤ 400 LOC) and does one thing.
+If you're contributing, those are the files to know. Each is short (≤ 400 LOC) and does one thing.
+
+## Next
+
+Now that you have the model:
+
+- Write a controller — [Controllers](./controllers.md).
+- Wire services — [Dependency injection](./dependency-injection.md).
+- Make the spec accurate — [OpenAPI](./openapi.md) and [Validation](./validation.md).
+- Drive it from a build script — [Programmatic API](./programmatic-api.md).
+- Run it from CI — [CLI](./cli.md).

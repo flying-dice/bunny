@@ -1,6 +1,6 @@
-export type { GenerateBunOptions } from "./bun.ts";
+export type { GenerateBunOptions, GenerateBunOutput } from "./bun.ts";
 export { generateBun } from "./bun.ts";
-export type { Config } from "./cli.ts";
+export type { Config, RunCliOptions } from "./cli.ts";
 export { runCli } from "./cli.ts";
 export type { GenerateOptions } from "./generator.ts";
 export { generate } from "./generator.ts";

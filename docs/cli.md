@@ -131,3 +131,19 @@ bunx github:flying-dice/bunny#v0.1.0 openapi -s 'src/**/*.ts' -o src/generated
 | `1`  | Configuration error, discovery error, or generation error. Stderr has the `bunny: …` message. |
 
 The CLI prints `wrote <path>` for each file emitted on success. Pipe stderr separately if you only want the written-paths list.
+
+### Exit-1 error families
+
+Every error message is prefixed `bunny:` for easy grep. The common ones:
+
+| Trigger                                  | Stderr (excerpt)                                                  |
+| ---------------------------------------- | ----------------------------------------------------------------- |
+| Missing `--source` and no rc value       | `bunny: --source <glob> is required (or sourceFiles in .bunnyrc)` |
+| Invalid `--format`                       | `bunny: --format must be "json" or "yaml" (got "csv")`            |
+| Unknown target                           | `bunny: unknown target "wat". Expected one of: all, openapi, bun.`|
+| Discovery error (e.g. duplicate operationId) | `bunny: duplicate operationId(s) across controllers …`        |
+| DI resolution error                      | `bunny: <Class>.constructor(…) — no active service @provides …`   |
+| `@provides` token doesn't resolve        | `bunny: <Class>: @provides X — class does not implement, extend, or equal "X"` |
+| `@inject` dependency cycle               | `bunny: @inject dependency cycle: A → B → A`                      |
+
+See [Dependency injection](./dependency-injection.md#common-errors) for the full DI error table.

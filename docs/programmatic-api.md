@@ -10,12 +10,14 @@ import {
   type Config,
   type GenerateOptions,
   type GenerateBunOptions,
+  type GenerateBunOutput,
+  type RunCliOptions,
 } from "@flying-dice/bunny";
 ```
 
-## `generate(options)` — OpenAPI spec only
+## `generate(options): oas31.OpenAPIObject`
 
-Returns the OpenAPI 3.1 document as an object. Doesn't touch disk.
+Returns the OpenAPI 3.1 document as an object (from [`openapi3-ts`](https://www.npmjs.com/package/openapi3-ts)). Doesn't touch disk.
 
 ```ts
 import { generate } from "@flying-dice/bunny";
@@ -38,9 +40,9 @@ await Bun.write("openapi.json", JSON.stringify(spec, null, 2));
 | `tsConfigFilePath` | `string`                      | none (standalone project) |
 | `base`             | `Partial<OpenAPIObject>`      | minimal envelope          |
 
-## `generateBun(options)` — DI + routes module source
+## `generateBun(options): GenerateBunOutput`
 
-Returns `{ app, routes }` — both are strings of TypeScript source. Write them as `app.ts` and `routes.ts` in the same directory.
+`GenerateBunOutput` is `{ app: string; routes: string }` — both are TypeScript source. Write them as `app.ts` and `routes.ts` in the same directory.
 
 ```ts
 import { generateBun } from "@flying-dice/bunny";
@@ -70,9 +72,9 @@ await Bun.write(path.join(outDir, "routes.ts"), routes);
 
 The `outDir` field is used to compute relative imports from the generated files back to your source files; you still need to write the files yourself.
 
-## `runCli(options)` — the CLI entry point
+## `runCli(options): Promise<string[]>`
 
-The exact entry point the `bunny` binary calls. Useful in build scripts that want CLI semantics (rc loading, flag parsing) without forking a subprocess.
+The exact entry point the `bunny` binary calls. Useful in build scripts that want CLI semantics (rc loading, flag parsing) without forking a subprocess. Resolves to the absolute paths it wrote.
 
 ```ts
 import { runCli } from "@flying-dice/bunny";
@@ -131,15 +133,47 @@ import {
 } from "@flying-dice/bunny";
 ```
 
-| Export                    | What it does                                                                       |
-| ------------------------- | ---------------------------------------------------------------------------------- |
-| `safeInvoke(fn)`          | Wraps a handler. Maps `RequestValidationError` → 400, anything else → 500.         |
-| `applyValidation(req, …)` | Runs the per-route validators; throws `RequestValidationError` on failure.         |
-| `AssertionError`          | Thrown by generated `assertX` helpers. Carries `path` + `reason`.                  |
-| `RequestValidationError`  | Thrown by `applyValidation`. The 400 contract is built from its fields.            |
-| `FORMATS`                 | Mutable map of `@format` predicates. Extend it to register custom formats.         |
+### Signatures
 
-`FORMATS.slug = (s) => /^[a-z0-9-]+$/.test(s)` is the supported way to add new formats — see [Validation](./validation.md#adding-your-own).
+```ts
+function safeInvoke(fn: () => Promise<Response>): Promise<Response>;
+
+function applyValidation(
+  req: Request & { params?: any; query?: any },
+  validators: {
+    params?: (o: any) => void;
+    query?:  (o: any) => void;
+    body?:   (o: any) => void;
+  },
+): Promise<void>;
+
+class AssertionError extends Error {
+  readonly path: string;     // ".email", ".tags[2]", ""
+  readonly reason: string;   // "expected string", "expected length >= 1", …
+}
+
+class RequestValidationError extends Error {
+  readonly location: "params" | "query" | "body";
+  readonly path: string;
+  readonly reason: string;
+}
+
+const FORMATS: Record<string, (s: string) => boolean>;
+```
+
+### Behaviour to know if you hand-roll a handler
+
+`applyValidation` mutates the request: after a successful body validation it replaces `req.json` with a function that returns the already-parsed body. Your handler can call `await req.json()` once without re-parsing. If you wrap handlers yourself (instead of using the generated `routes.ts`), preserve this contract — the consuming controller code expects it.
+
+`safeInvoke`'s 400 / 500 JSON shape is the [error contract](./validation.md#error-contract); both error classes carry the fields that contract exposes. To swap the contract, write your own wrapper around `applyValidation` and skip `safeInvoke`.
+
+Extending `FORMATS`:
+
+```ts
+FORMATS.slug = (s) => /^[a-z0-9-]+$/.test(s);
+```
+
+See [Validation — Adding your own](./validation.md#adding-your-own).
 
 ## Types
 
@@ -164,9 +198,9 @@ import type {
 
 These are pure type exports — fully erased at runtime. See [Controllers](./controllers.md#the-request) for the request/response shapes.
 
-## Example: a custom build script
+## Example: multi-profile build script
 
-If you don't want the CLI in the loop, compose the two generators directly:
+Generate one bundle per profile, each in its own output directory:
 
 ```ts
 // scripts/generate.ts
@@ -174,20 +208,25 @@ import { generate, generateBun } from "@flying-dice/bunny";
 import * as path from "node:path";
 
 const sourceFiles = "src/**/*.ts";
-const outDir = path.resolve("src/generated");
-const profile = process.env.PROFILE ?? "default";
+const profiles = ["default", "production", "test"] as const;
 
-const spec = generate({
-  sourceFiles,
-  base: { info: { title: "Users API", version: process.env.VERSION ?? "0.0.0" } },
-});
-await Bun.write(path.join(outDir, "openapi.json"), JSON.stringify(spec, null, 2));
+for (const profile of profiles) {
+  const outDir = path.resolve(`src/generated.${profile}`);
 
-const { app, routes } = generateBun({ sourceFiles, outDir, profile });
-await Bun.write(path.join(outDir, "app.ts"), app);
-await Bun.write(path.join(outDir, "routes.ts"), routes);
+  const spec = generate({
+    sourceFiles,
+    base: {
+      info: { title: "Users API", version: process.env.VERSION ?? "0.0.0" },
+    },
+  });
+  await Bun.write(path.join(outDir, "openapi.json"), JSON.stringify(spec, null, 2));
 
-console.log(`generated under profile "${profile}"`);
+  const { app, routes } = generateBun({ sourceFiles, outDir, profile });
+  await Bun.write(path.join(outDir, "app.ts"), app);
+  await Bun.write(path.join(outDir, "routes.ts"), routes);
+
+  console.log(`profile "${profile}" → ${outDir}`);
+}
 ```
 
-Run with `PROFILE=production bun scripts/generate.ts`.
+Production code imports `from "./generated.production/routes.ts"`; the test setup imports `from "./generated.test/routes.ts"`. The OpenAPI document is the same shape across profiles (it doesn't depend on which impl is wired), so any profile's `openapi.json` works for documentation.

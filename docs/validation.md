@@ -30,7 +30,7 @@ That's enough. Bunny derives a `validate_createUser_body` function and applies i
 | `@multipleOf N`       | number     | `multipleOf`                    | ✓                   |
 | `@minItems N`         | array      | `minItems`                      | ✓                   |
 | `@maxItems N`         | array      | `maxItems`                      | ✓                   |
-| `@uniqueItems`        | array      | `uniqueItems: true`             | ✓                   |
+| `@uniqueItems`        | array      | `uniqueItems: true`             | ✓ (use `@uniqueItems false` to opt out) |
 | `@minProperties N`    | object     | `minProperties`                 | spec only           |
 | `@maxProperties N`    | object     | `maxProperties`                 | spec only           |
 | `@default JSON`       | any        | `default`                       | spec only           |
@@ -39,7 +39,13 @@ That's enough. Bunny derives a `validate_createUser_body` function and applies i
 | `@title TEXT`         | any        | `title`                         | spec only           |
 | `@description TEXT`   | any        | `description`                   | spec only           |
 
-Free-form JSDoc prose before the first `@tag` becomes `description` automatically — no explicit `@description` needed.
+Free-form JSDoc prose before the first JSDoc tag becomes `description` automatically — no explicit `@description` needed.
+
+**Notes:**
+
+- `@default` / `@example` parse their argument as JSON; on parse failure the raw string is kept.
+- `@pattern` is emitted verbatim; it's anchored only if you anchor it, and no regex flags are supported. Escape forward slashes inside the pattern.
+- Conflicting constraints (`@minimum 10 @maximum 5`) compile fine and produce an always-failing field at runtime. Bunny doesn't warn.
 
 ## Type aliases carry constraints
 
@@ -60,6 +66,8 @@ export interface User {
 ```
 
 The OpenAPI generator hoists each alias into `components/schemas/{Email,Uuid}` and the validators emit `assertEmail` / `assertUuid` helpers. See [OpenAPI](./openapi.md#type-alias-hoisting) for the details.
+
+**Precedence.** Property-level JSDoc overrides constraints inherited from the alias. Both still appear in the spec (as sibling keywords beside `$ref`) per OpenAPI 3.1 semantics.
 
 ## `@format` predicates
 
@@ -82,7 +90,7 @@ Built-in formats:
 
 ### Adding your own
 
-`FORMATS` is a plain object on the runtime entry. Extend it before booting the server (or in your app's bootstrap module):
+`FORMATS` is a plain object of `(s: string) => boolean` predicates. Extend it before booting the server (or in your app's bootstrap module):
 
 ```ts
 import { FORMATS } from "@flying-dice/bunny";
@@ -117,14 +125,28 @@ Validation runs on the parsed body (`await req.json()`). The original request st
 
 ## Error contract
 
-Validation failures produce a 400 with a structured body. Handler exceptions produce a 500.
+Validation failures produce a 400; handler exceptions produce a 500. The bodies are stable JSON.
 
-| Source       | HTTP | Cause                                                                  | Body shape                                                      |
-| ------------ | ---- | ---------------------------------------------------------------------- | --------------------------------------------------------------- |
-| `"request"`  | 400  | params / query / body fail their schema, or body isn't valid JSON       | `{ error, source: "request", location, path, reason }`          |
-| `"response"` | 500  | Handler threw (or rejected) for any reason                              | `{ error, source: "response", reason, name }`                   |
+```ts
+// 400 — request failed validation
+{
+  error: "BadRequest",
+  source: "request",
+  location: "params" | "query" | "body",
+  path: string,     // JSON-pointer-ish (".email", ".tags[2]"); "" if the body itself is malformed
+  reason: string,   // e.g. "expected length >= 1", "expected format uuid", "invalid JSON"
+}
 
-`location` is one of `params` / `query` / `body`. `path` is the JSON-pointer-ish dotted path to the failing field (e.g. `.email`, `.tags[2]`).
+// 500 — handler threw (or rejected)
+{
+  error: "InternalServerError",
+  source: "response",
+  reason: string,   // err.message
+  name: string,     // err.name (e.g. "TypeError")
+}
+```
+
+Special case: a body whose declared content type is `application/json` but whose payload doesn't parse → 400 with `path: ""` and `reason: "invalid JSON"`.
 
 Example bad request:
 

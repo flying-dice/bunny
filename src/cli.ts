@@ -35,7 +35,7 @@ export interface Config {
 type Target = "openapi" | "bun";
 const ALL_TARGETS: readonly Target[] = ["openapi", "bun"];
 
-interface RunCliOptions {
+export interface RunCliOptions {
   argv?: string[];
   cwd?: string;
   log?: (msg: string) => void;
@@ -260,13 +260,14 @@ Usage: bunx @flying-dice/bunny [target ...] [flags]   (or "bunny [target ...]" o
 
 Targets:
   openapi       Generate the OpenAPI spec.
-  bun           Generate the Bun.serve routes module.
+  bun           Generate the DI wiring + Bun.serve handlers.
   all           Run every target (the default when no target is given).
 
 Outputs are conventional, written into the directory chosen by --out-dir:
 
   {outDir}/openapi.json   (or openapi.yaml when --format yaml)
-  {outDir}/app.ts         (default-exports a spreadable Bun.serve routes object)
+  {outDir}/app.ts         (DI wiring — singletons exported by name)
+  {outDir}/routes.ts      (default-exports the spreadable Bun.serve 'routes' object)
 
 Flags (override any matching .bunnyrc value):
   -h, --help                  Show this message.
