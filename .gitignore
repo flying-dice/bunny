@@ -1,0 +1,49 @@
+# dependencies (bun install)
+node_modules
+
+# output
+out
+dist
+*.tgz
+.tmp
+
+# generated example artefacts — regenerated with `bun run example:all`
+examples/api/app.ts
+examples/api/routes.ts
+examples/csr/app.ts
+examples/csr/routes.ts
+examples/ssr/app.ts
+examples/ssr/routes.ts
+examples/**/openapi.json
+examples/**/openapi.yaml
+examples/**/openapi.yml
+
+# CSR build output
+examples/csr/dist
+
+# code coverage
+coverage
+*.lcov
+
+# logs
+logs
+_.log
+report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
+
+# dotenv environment variable files
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
+# caches
+.eslintcache
+.cache
+*.tsbuildinfo
+
+# IntelliJ based IDEs
+.idea
+
+# Finder (MacOS) folder config
+.DS_Store
