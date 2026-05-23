@@ -11,18 +11,20 @@
 import * as M from "../ast/index.ts";
 import type * as N from "../ast/nodes.generated.ts";
 import { lowerBody } from "./lower-match.ts";
+import { lowerRange } from "./lower-range.ts";
 import { lowerTry } from "./lower-try.ts";
 import { parseToAst } from "./tree-sitter.ts";
 
 // Body rewrites compose by running each pass over the body text
 // independently and feeding the next pass the post-rewrite source.
-// match and try both anchor their splices to original AST positions,
-// so a body that mixes them needs care — neither pass walks the
-// other's output. Match runs first; try slots its locals in around
-// the IIFE that match emitted.
+// Each pass anchors its splices to original AST positions, so a body
+// mixing several constructs needs care — no pass walks another's
+// output. Match runs first; range and try slot their rewrites in
+// around the IIFE that match emitted.
 function lowerAll(body: N.StatementBlockNode): string {
   const afterMatch = lowerBody(body, body.text);
-  return lowerTry(body, afterMatch);
+  const afterRange = lowerRange(body, afterMatch);
+  return lowerTry(body, afterRange);
 }
 
 export async function parseViaTreeSitter(source: string): Promise<M.ParseResult> {

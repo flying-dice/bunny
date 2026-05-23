@@ -60,6 +60,11 @@
 
 (try_expression "?" @operator)
 
+; ---- range (`..` / `..=`) ----------------------------------------------
+
+(range_expression ".." @operator)
+(range_expression "..=" @operator)
+
 ; ---- match patterns -----------------------------------------------------
 
 (struct_pattern name: (type_identifier) @type)
