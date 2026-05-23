@@ -144,18 +144,10 @@ type Pattern =
    *
    *   { kind: "Hello", who: name } → check kind, bind who as `name`
    *   { ok: true, value: v }       → check ok, bind value as `v`
+   *   { kind: "Bye" }              → discriminant-only
+   *   { value }                    → shorthand bind (≡ { value: value })
    */
-  | { kind: "object"; entries: ObjectPatternEntry[] }
-  /**
-   * Enum-variant pattern. Sugar for object patterns where the
-   * discriminator is a known variant of a declared enum:
-   *
-   *   CalcError.BadNumber { input: s }
-   *   CalcError.DivByZero
-   *
-   * Lowered the same way as `{ kind: "<variantName>", ...entries }`.
-   */
-  | { kind: "variant"; variantName: string; entries: ObjectPatternEntry[] };
+  | { kind: "object"; entries: ObjectPatternEntry[] };
 
 type ObjectPatternEntry =
   | { type: "check"; key: string; valueText: string }
@@ -223,44 +215,6 @@ function parsePattern(
   if (/^-?\d/.test(trimmed)) {
     return { kind: "literal", text: trimmed };
   }
-  // Enum-variant pattern: `EnumName.Variant` (unit) or
-  // `EnumName.Variant { f: bind, … }` (struct variant).
-  const variantMatch = trimmed.match(
-    /^([A-Z][A-Za-z0-9_]*)\.([A-Z][A-Za-z0-9_]*)(\s*\{[\s\S]*\})?$/
-  );
-  if (variantMatch) {
-    const [, , variantName, bodyText] = variantMatch;
-    if (!bodyText) {
-      return { kind: "variant", variantName: variantName!, entries: [] };
-    }
-    const inner = bodyText.trim().slice(1, -1).trim();
-    if (inner.length === 0) {
-      return { kind: "variant", variantName: variantName!, entries: [] };
-    }
-    const entries: ObjectPatternEntry[] = [];
-    for (const part of splitTopLevelCommas(inner)) {
-      const literalMatch = part.match(
-        /^\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*:\s*(true|false|null|undefined|-?\d+(?:\.\d+)?|"[^"]*"|'[^']*')\s*$/
-      );
-      if (literalMatch) {
-        entries.push({ type: "check", key: literalMatch[1]!, valueText: literalMatch[2]! });
-        continue;
-      }
-      const bindMatch = part.match(/^\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*:\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*$/);
-      if (bindMatch) {
-        entries.push({ type: "bind", key: bindMatch[1]!, binding: bindMatch[2]! });
-        continue;
-      }
-      // Shorthand `{ field }` ≡ `{ field: field }` — bind the same-named local.
-      const shorthandMatch = part.match(/^\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*$/);
-      if (shorthandMatch) {
-        entries.push({ type: "bind", key: shorthandMatch[1]!, binding: shorthandMatch[1]! });
-        continue;
-      }
-      return undefined;
-    }
-    return { kind: "variant", variantName: variantName!, entries };
-  }
   if (trimmed.startsWith("{")) {
     // Parse one or more `<key>: <literal-or-ident>` entries. A literal
     // value is a runtime check; an identifier is a binding that pulls
@@ -279,6 +233,12 @@ function parsePattern(
       const bindMatch = part.match(/^\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*:\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*$/);
       if (bindMatch) {
         entries.push({ type: "bind", key: bindMatch[1]!, binding: bindMatch[2]! });
+        continue;
+      }
+      // Shorthand `{ field }` ≡ `{ field: field }`.
+      const shorthandMatch = part.match(/^\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*$/);
+      if (shorthandMatch) {
+        entries.push({ type: "bind", key: shorthandMatch[1]!, binding: shorthandMatch[1]! });
         continue;
       }
       return undefined;
@@ -306,18 +266,11 @@ function renderLowered(scrutinee: string, arms: readonly Arm[]): string {
         lines.push(`  { const ${arm.pattern.name} = __m; return ${arm.resultText}; }`);
         break;
       }
-      case "object":
-      case "variant": {
-        const pattern = arm.pattern;
-        const entries = pattern.entries;
+      case "object": {
+        const entries = arm.pattern.entries;
         const checks = entries.filter((e) => e.type === "check");
         const binds = entries.filter((e) => e.type === "bind");
         const guards: string[] = [];
-        if (pattern.kind === "variant") {
-          guards.push(
-            `(__m as Record<string, unknown>).kind === ${JSON.stringify(pattern.variantName)}`
-          );
-        }
         for (const c of checks) {
           guards.push(
             `(__m as Record<string, unknown>).${c.key} === ${c.valueText}`

@@ -65,7 +65,6 @@ export function parse(source: string): M.ParseResult {
           nextText === "struct" ||
           nextText === "impl" ||
           nextText === "trait" ||
-          nextText === "enum" ||
           nextText === "function"
         ) {
           flushOpaque(tok.start);
@@ -77,9 +76,7 @@ export function parse(source: string): M.ParseResult {
                 ? parseImpl(tokens, nextIdx, source, true, pendingAttrs, declStart, diagnostics)
                 : nextText === "trait"
                   ? parseTrait(tokens, nextIdx, source, true, pendingAttrs, declStart, diagnostics)
-                  : nextText === "enum"
-                    ? parseEnum(tokens, nextIdx, source, true, pendingAttrs, declStart, diagnostics)
-                    : parseFunction(tokens, nextIdx, source, true, pendingAttrs, declStart, false, diagnostics);
+                  : parseFunction(tokens, nextIdx, source, true, pendingAttrs, declStart, false, diagnostics);
           parts.push(parsed.decl);
           pendingAttrs = [];
           i = parsed.next;
@@ -141,16 +138,6 @@ export function parse(source: string): M.ParseResult {
     if (tok.kind === "ident" && tok.text === "trait") {
       flushOpaque(tok.start);
       const parsed = parseTrait(tokens, i, source, false, pendingAttrs, tok.start, diagnostics);
-      parts.push(parsed.decl);
-      pendingAttrs = [];
-      i = parsed.next;
-      opaqueWriteFrom = tokens[i]?.start ?? source.length;
-      opaqueStart = opaqueWriteFrom;
-      continue;
-    }
-    if (tok.kind === "ident" && tok.text === "enum") {
-      flushOpaque(tok.start);
-      const parsed = parseEnum(tokens, i, source, false, pendingAttrs, tok.start, diagnostics);
       parts.push(parsed.decl);
       pendingAttrs = [];
       i = parsed.next;
@@ -519,133 +506,6 @@ function parseImpl(
     },
     next: closeIdx + 1,
   };
-}
-
-function parseEnum(
-  tokens: readonly Token[],
-  start: number,
-  source: string,
-  exported: boolean,
-  attrs: M.Attr[],
-  declStart: number,
-  diagnostics: M.ParseDiagnostic[]
-): { decl: M.EnumDecl; next: number } {
-  // Header: `enum Name<Generics> { ... }`
-  const nameIdx = nextNonTrivia(tokens, start + 1);
-  if (nameIdx === -1 || tokens[nameIdx]!.kind !== "ident") {
-    diagnostics.push({
-      message: "expected identifier after enum",
-      span: { start: tokens[start]!.end, end: tokens[start]!.end },
-    });
-    return { decl: emptyEnum(declStart, attrs), next: start + 1 };
-  }
-  const name = tokens[nameIdx]!.text;
-  const braceIdx = findOpener(tokens, nameIdx + 1, "lbrace");
-  if (braceIdx === -1) {
-    diagnostics.push({
-      message: "expected { after enum name",
-      span: { start: tokens[nameIdx]!.end, end: tokens[nameIdx]!.end },
-    });
-    return { decl: emptyEnum(declStart, attrs), next: nameIdx + 1 };
-  }
-  const generics = joinTexts(tokens, nameIdx + 1, braceIdx).trim();
-  const closeIdx = findMatching(tokens, braceIdx, "lbrace", "rbrace");
-  if (closeIdx === -1) {
-    diagnostics.push({
-      message: "unterminated enum body",
-      span: { start: tokens[braceIdx]!.start, end: tokens[braceIdx]!.end },
-    });
-    return { decl: emptyEnum(declStart, attrs), next: braceIdx + 1 };
-  }
-  const variants = parseEnumVariants(tokens, braceIdx + 1, closeIdx, source, diagnostics);
-  return {
-    decl: {
-      kind: "enum",
-      name,
-      exported,
-      generics,
-      variants,
-      attrs,
-      span: { start: declStart, end: tokens[closeIdx]!.end },
-    },
-    next: closeIdx + 1,
-  };
-}
-
-function emptyEnum(declStart: number, attrs: M.Attr[]): M.EnumDecl {
-  return {
-    kind: "enum",
-    name: "",
-    exported: false,
-    generics: "",
-    variants: [],
-    attrs,
-    span: { start: declStart, end: declStart },
-  };
-}
-
-/**
- * Walk the enum body collecting variants. Variants are comma-separated.
- * Each variant is either:
- *   `Name`                  (unit)
- *   `Name { f: T, g: T }`   (struct variant, body parsed like a struct's fields)
- */
-function parseEnumVariants(
-  tokens: readonly Token[],
-  from: number,
-  to: number,
-  source: string,
-  diagnostics: M.ParseDiagnostic[]
-): M.EnumVariant[] {
-  const variants: M.EnumVariant[] = [];
-  let i = from;
-  while (i < to) {
-    while (i < to && (isTrivia(tokens[i]!) || tokens[i]!.kind === "comma")) i++;
-    if (i >= to) break;
-    const t = tokens[i]!;
-    if (t.kind !== "ident") {
-      diagnostics.push({
-        message: "expected enum variant name",
-        span: { start: t.start, end: t.end },
-      });
-      i++;
-      continue;
-    }
-    const variantName = t.text;
-    const variantStart = t.start;
-    let j = nextNonTrivia(tokens, i + 1);
-    if (j === -1 || j >= to) {
-      // trailing variant at the end of the body
-      variants.push({ name: variantName, fields: [], span: { start: variantStart, end: t.end } });
-      i++;
-      continue;
-    }
-    const next = tokens[j]!;
-    if (next.kind === "lbrace") {
-      // struct variant: parse fields between `{` and matching `}`
-      const fieldsClose = findMatching(tokens, j, "lbrace", "rbrace");
-      if (fieldsClose === -1 || fieldsClose >= to) {
-        diagnostics.push({
-          message: `unterminated struct variant ${variantName}`,
-          span: { start: j, end: j },
-        });
-        i = j + 1;
-        continue;
-      }
-      const fields = parseStructFields(tokens, j + 1, fieldsClose, source, diagnostics);
-      variants.push({
-        name: variantName,
-        fields,
-        span: { start: variantStart, end: tokens[fieldsClose]!.end },
-      });
-      i = fieldsClose + 1;
-    } else {
-      // unit variant — advance past the name
-      variants.push({ name: variantName, fields: [], span: { start: variantStart, end: t.end } });
-      i = j;
-    }
-  }
-  return variants;
 }
 
 function parseTrait(

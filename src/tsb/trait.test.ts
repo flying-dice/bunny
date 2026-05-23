@@ -30,34 +30,18 @@ test("match supports boolean discriminants and binding side-by-side", async () =
   expect(ts).toContain("(__m as Record<string, unknown>).ok === false");
 });
 
-test("enum emits discriminated-union type + namespace ctors", async () => {
+test("{ field } shorthand binds a same-named local in the arm body", async () => {
   const { ts } = await transpile(`
-    enum Shape {
-      Circle { radius: number },
-      Triangle,
-    }
-  `);
-  expect(ts).toContain("export type Shape =");
-  expect(ts).toContain('| { kind: "Circle"; radius: number }');
-  expect(ts).toContain('| { kind: "Triangle" }');
-  expect(ts).toContain("Circle(fields: { radius: number }): Shape");
-  expect(ts).toContain('return { kind: "Circle", ...fields }');
-  expect(ts).toContain('Triangle: { kind: "Triangle" } as Shape');
-});
-
-test("EnumName.Variant patterns lower to kind-check + bindings", async () => {
-  const { ts } = await transpile(`
-    enum E { Hit { value: number }, Miss }
+    type E = { kind: "Hit"; value: number } | { kind: "Miss" };
     export function f(e: E): number {
       return match e {
-        E.Hit { value } => value,
-        E.Miss => 0,
+        { kind: "Hit", value } => value,
+        { kind: "Miss" } => 0,
       };
     }
   `);
   expect(ts).toContain('(__m as Record<string, unknown>).kind === "Hit"');
   expect(ts).toContain("const value = (__m as any).value");
-  expect(ts).toContain('(__m as Record<string, unknown>).kind === "Miss"');
 });
 
 test("match expressions in opaque (non-attribute) functions get lowered", async () => {

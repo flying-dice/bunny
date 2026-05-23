@@ -130,35 +130,6 @@ export interface TraitMethod {
   span: Span;
 }
 
-/**
- * An enum declaration — Rust's tagged-union ADT. Each variant is either
- * a *unit* (just a name) or a *struct* variant (a name with named
- * fields). Tuple variants (`BadNumber(string)`) aren't in v1; use
- * struct fields with a single key instead.
- *
- *   enum CalcError {
- *     BadNumber { input: string },
- *     UnknownOp { op: string },
- *     DivByZero,
- *   }
- */
-export interface EnumDecl {
-  kind: "enum";
-  name: string;
-  exported: boolean;
-  generics: string;
-  variants: EnumVariant[];
-  attrs: Attr[];
-  span: Span;
-}
-
-export interface EnumVariant {
-  name: string;
-  /** Empty for unit variants. */
-  fields: StructField[];
-  span: Span;
-}
-
 export interface FunctionDecl {
   kind: "function";
   name: string;
@@ -177,7 +148,6 @@ export type ModulePart =
   | StructDecl
   | ImplDecl
   | TraitDecl
-  | EnumDecl
   | FunctionDecl;
 
 export interface Module {

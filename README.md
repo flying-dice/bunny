@@ -155,40 +155,37 @@ Same-module struct fields chain automatically (no `#[deep]` needed). Cross-modul
 | `Hash` | `hash(self): string` (stable FNV-1a over the JSON form) |
 | `Event` | side-effect only: emits an `__event_<Name>` descriptor the events assembler harvests |
 
-### `enum` + `match`
+### `match`
 
-`enum` declares a Rust-style tagged union. Each variant is either a *unit* (just a name) or a *struct* variant with named fields. tsb emits a TS discriminated-union type plus a namespace `const` carrying the variant constructors — Rust's `EnumName::Variant` becomes `EnumName.Variant`.
+`match` pattern-matches on a value. Patterns: literals, identifiers (binding), the wildcard `_`, and object patterns. Each object-pattern entry is either:
+
+- a **check** (`kind: "X"` requires the field equals the literal)
+- a **binding** (`value: v` pulls the field's value into the arm's scope as `v`)
+- a **shorthand binding** (`{ value }` ≡ `{ value: value }`)
+
+Mix them freely. tsb intentionally doesn't ship its own `enum` keyword — TypeScript's `enum` would conflict, and discriminated unions are already the idiomatic shape. Model your sum types as plain union types and match on them directly.
 
 ```tsb
-enum CalcError {
-  BadNumber { input: string },
-  UnknownOp { op: string },
-  DivByZero,
-}
+type CalcError =
+  | { kind: "BadNumber"; input: string }
+  | { kind: "UnknownOp"; op: string }
+  | { kind: "DivByZero" };
 
-// Construct:
-Err(CalcError.BadNumber({ input: "x" }));
-Err(CalcError.DivByZero);
-
-// Match (variant patterns, with field bindings + shorthand):
 function describe(err: CalcError): string {
   return match err {
-    CalcError.BadNumber { input }  => `not a number: ${input}`,
-    CalcError.UnknownOp { op }     => `unknown operator: ${op}`,
-    CalcError.DivByZero            => "cannot divide by zero",
+    { kind: "BadNumber", input } => `not a number: ${input}`,
+    { kind: "UnknownOp", op }    => `unknown operator: ${op}`,
+    { kind: "DivByZero" }        => "cannot divide by zero",
+    _                            => "unknown error",
   };
 }
-```
 
-Object patterns still work for matching plain discriminated unions or Result. Each pattern entry is either a literal **check** (`kind: "X"` requires equality) or a **binding** (`value: v` pulls the field's value into the arm's scope as `v`; `{ value }` is the shorthand). Mix them freely.
-
-```tsb
 // Match on Result with payload bindings:
 function explain(r: Result<number, string>): string {
   return match r {
-    { ok: true, value: v }  => `ok: ${v}`,
-    { ok: false, error: e } => `err: ${e}`,
-    _                       => "?",
+    { ok: true, value }  => `ok: ${value}`,
+    { ok: false, error } => `err: ${error}`,
+    _                    => "?",
   };
 }
 ```

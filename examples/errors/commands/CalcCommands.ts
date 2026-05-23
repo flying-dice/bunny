@@ -9,14 +9,14 @@
 // is structural — Result ok/err, error variants, op selection. No
 // try/catch; every failure mode is a typed value.
 
-import { CalcError } from "../errors/CalcError.ts";
+import type { CalcError } from "../errors/CalcError.ts";
 import { Registration } from "../dtos/Registration.ts";
 
 // ---------- parsing helpers -----------------------------------------------
 
 function parseNumber(s: string): Result<number, CalcError> {
   const n = Number(s);
-  if (Number.isNaN(n)) return Err(CalcError.BadNumber({ input: s }));
+  if (Number.isNaN(n)) return Err({ kind: "BadNumber", input: s });
   return Ok(n);
 }
 
@@ -25,8 +25,8 @@ function apply(a: number, op: string, b: number): Result<number, CalcError> {
   if (__m === "+") return Ok(a + b);
   if (__m === "-") return Ok(a - b);
   if (__m === "*") return Ok(a * b);
-  if (__m === "/") return b === 0 ? Err(CalcError.DivByZero) : Ok(a / b);
-  return Err(CalcError.UnknownOp({ op }));
+  if (__m === "/") return b === 0 ? Err({ kind: "DivByZero" }) : Ok(a / b);
+  return Err({ kind: "UnknownOp", op });
   throw new Error("match: no arm matched");
 })(op);
 }
@@ -42,14 +42,16 @@ function compute(a: string, op: string, b: string): Result<number, CalcError> {
   return apply(aN.value, op, bN.value);
 }
 
-// Match on an enum variant — `EnumName.Variant { field }` desugars to
-// the underlying tagged-union check + field bindings, but reads like
-// `match err { CalcError::Variant { field } => ... }` does in Rust.
+// Match on the discriminated union. Each arm checks the `kind` tag and
+// binds the variant's payload fields into the arm scope via the
+// `{ field }` shorthand — no need to reach back through the outer
+// `err` to pull values out.
 function describe(err: CalcError): string {
   return ((__m) => {
   if (typeof __m === "object" && __m !== null && (__m as Record<string, unknown>).kind === "BadNumber") { const input = (__m as any).input; return `not a number: ${input}`; }
   if (typeof __m === "object" && __m !== null && (__m as Record<string, unknown>).kind === "UnknownOp") { const op = (__m as any).op; return `unknown operator: ${op}; supported: + - * /`; }
   if (typeof __m === "object" && __m !== null && (__m as Record<string, unknown>).kind === "DivByZero") return "cannot divide by zero";
+  return "unknown error";
   throw new Error("match: no arm matched");
 })(err);
 }
