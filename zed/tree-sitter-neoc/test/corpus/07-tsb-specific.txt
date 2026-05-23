@@ -90,6 +90,44 @@ match status {
         (string_fragment_double)))))
 
 ==================
+match arm with pattern guard
+==================
+
+match n {
+  Number { n } if n > 0 => "positive",
+  _ if n < 0 => "negative",
+  _ => "zero",
+};
+
+---
+
+(source_file
+  (match_expression
+    scrutinee: (identifier)
+    (match_arm
+      pattern: (struct_pattern
+        name: (type_identifier)
+        body: (pattern_body
+          (pattern_shorthand
+            (identifier))))
+      guard: (binary_expression
+        (identifier)
+        (number))
+      body: (string
+        (string_fragment_double)))
+    (match_arm
+      pattern: (wildcard_pattern)
+      guard: (binary_expression
+        (identifier)
+        (number))
+      body: (string
+        (string_fragment_double)))
+    (match_arm
+      pattern: (wildcard_pattern)
+      body: (string
+        (string_fragment_double)))))
+
+==================
 attribute on struct
 ==================
 

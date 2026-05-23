@@ -55,6 +55,11 @@ module.exports = grammar({
     // a ternary. Try wins inside the right end of a range; the GLR
     // engine picks whichever leads to a complete parse.
     [$.try_expression, $.range_expression, $.ternary_expression],
+    // `Foo { x } if x => …` — the guard expression and the arm's `=>`
+    // overlap with arrow_function's `identifier => body` form. The
+    // arm boundary always wins: the `=>` after a guard belongs to the
+    // arm, not an arrow inside it.
+    [$._right_expression, $.arrow_function],
   ],
 
   rules: {
@@ -70,6 +75,7 @@ module.exports = grammar({
       $.attributed_declaration,
       $.function_declaration,
       $.struct_declaration,
+      $.tuple_struct_declaration,
       $.impl_declaration,
       $.trait_declaration,
       $.return_statement,
@@ -149,6 +155,18 @@ module.exports = grammar({
       field('name', $.type_identifier),
       optional(field('generics', $.type_parameters)),
       field('body', $.struct_body),
+    ),
+
+    // Rust-style newtype shorthand: `struct ProductId(string)` desugars
+    // to a single-field struct named `value`. No attribute slots on the
+    // field — use the block form when constraints are needed.
+    tuple_struct_declaration: $ => seq(
+      optional('export'),
+      'struct',
+      field('name', $.type_identifier),
+      '(',
+      field('tuple_type', $._type),
+      ')',
     ),
 
     struct_body: $ => seq(
@@ -498,6 +516,7 @@ module.exports = grammar({
 
     match_arm: $ => seq(
       field('pattern', $._pattern),
+      optional(seq('if', field('guard', $._expression))),
       '=>',
       field('body', $._expression),
     ),

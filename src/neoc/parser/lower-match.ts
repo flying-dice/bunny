@@ -54,9 +54,13 @@ function renderMatchAsIife(node: N.MatchExpressionNode): string {
   // Lua forbids any statement after `return` in a block. Wildcard /
   // binding arms render as bare `return ...` and always match, so a
   // trailing `error("…")` would never run and the parser would reject
-  // it. Skip the fallback when those arms are present.
+  // it. Skip the fallback when those arms are present. A guarded
+  // wildcard / binding arm is NOT a true catch-all — the guard can
+  // fail and the next arm runs — so it doesn't count here.
   const hasCatchAll = arms.some(
-    (a) => a.pattern.kind === "wildcard_pattern" || a.pattern.kind === "binding_pattern"
+    (a) =>
+      a.guard === undefined &&
+      (a.pattern.kind === "wildcard_pattern" || a.pattern.kind === "binding_pattern")
   );
 
   const lines: string[] = ["(function(__m)"];
@@ -73,30 +77,41 @@ function renderMatchAsIife(node: N.MatchExpressionNode): string {
 function renderArm(arm: N.MatchArmNode): string {
   const result = arm.body.text;
   const pattern = arm.pattern;
+  const guard = arm.guard?.text;
 
   switch (pattern.kind) {
     case "wildcard_pattern":
-      return `  return ${result}`;
+      return guard
+        ? `  if ${guard} then return ${result} end`
+        : `  return ${result}`;
 
     case "literal_pattern": {
-      return `  if __m == ${pattern.text} then return ${result} end`;
+      const cond = guard
+        ? `__m == ${pattern.text} and (${guard})`
+        : `__m == ${pattern.text}`;
+      return `  if ${cond} then return ${result} end`;
     }
 
     case "binding_pattern": {
       const name = pattern.text;
+      if (guard) {
+        return `  do local ${name} = __m; if ${guard} then return ${result} end end`;
+      }
       return `  do local ${name} = __m; return ${result} end`;
     }
 
     case "object_pattern":
-      return renderObjectArm(pattern, result, undefined);
+      return renderObjectArm(pattern, result, undefined, guard);
 
     case "struct_pattern": {
       const structName = pattern.name.text;
       const body = pattern.body;
       if (body) {
-        return renderObjectArm(body as N.PatternBodyNode, result, structName);
+        return renderObjectArm(body as N.PatternBodyNode, result, structName, guard);
       }
-      const cond = `type(__m) == "table" and __m._struct == ${luaString(structName)}`;
+      const cond = guard
+        ? `type(__m) == "table" and __m._struct == ${luaString(structName)} and (${guard})`
+        : `type(__m) == "table" and __m._struct == ${luaString(structName)}`;
       return `  if ${cond} then return ${result} end`;
     }
 
@@ -108,7 +123,8 @@ function renderArm(arm: N.MatchArmNode): string {
 function renderObjectArm(
   body: N.PatternBodyNode | N.ObjectPatternNode,
   result: string,
-  structName: string | undefined
+  structName: string | undefined,
+  guard: string | undefined
 ): string {
   const inner: N.PatternBodyNode | undefined =
     body.kind === "object_pattern"
@@ -139,11 +155,17 @@ function renderObjectArm(
 
   const cond = guards.join(" and ");
   if (binds.length === 0) {
+    if (guard) {
+      return `  if ${cond} then if ${guard} then return ${result} end end`;
+    }
     return `  if ${cond} then return ${result} end`;
   }
   const bindings = binds
     .map((b) => `local ${b.binding} = __m.${b.key}`)
     .join("; ");
+  if (guard) {
+    return `  if ${cond} then ${bindings}; if ${guard} then return ${result} end end`;
+  }
   return `  if ${cond} then ${bindings}; return ${result} end`;
 }
 
