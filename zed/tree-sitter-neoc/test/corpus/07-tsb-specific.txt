@@ -191,3 +191,33 @@ export function getProduct(id: string): Product {
               (object_literal
                 (shorthand_property
                   (identifier))))))))))
+
+==================
+try expression in let binding
+==================
+
+let v = parse()?;
+
+---
+
+(source_file
+  (variable_declaration
+    name: (identifier)
+    value: (try_expression
+      (call_expression
+        function: (identifier)
+        arguments: (arguments)))))
+
+==================
+try expression as statement
+==================
+
+doWork()?;
+
+---
+
+(source_file
+  (try_expression
+    (call_expression
+      function: (identifier)
+      arguments: (arguments))))

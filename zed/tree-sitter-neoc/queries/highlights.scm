@@ -56,6 +56,10 @@
 (object_property key: (identifier) @property)
 (property_signature name: (identifier) @property)
 
+; ---- try (postfix `?`) -------------------------------------------------
+
+(try_expression "?" @operator)
+
 ; ---- match patterns -----------------------------------------------------
 
 (struct_pattern name: (type_identifier) @type)
