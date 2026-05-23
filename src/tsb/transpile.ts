@@ -28,6 +28,8 @@ export interface TranspileResult {
   ts: string;
   diagnostics: M.ParseDiagnostic[];
   chunks: EmitChunk[];
+  /** True if the compiled output uses Result / Ok / Err / ConstraintError. */
+  usesResult: boolean;
 }
 
 export async function transpile(
@@ -40,8 +42,13 @@ export async function transpile(
   for (const path of options.macroModules ?? []) {
     await registry.loadFrom(path);
   }
-  const { ts, diagnostics: emitDiags, chunks } = emit(module, registry, {
+  const { ts, diagnostics: emitDiags, chunks, usesResult } = emit(module, registry, {
     sourcePath: options.sourcePath,
   });
-  return { ts, diagnostics: [...parseDiags, ...emitDiags], chunks };
+  return {
+    ts,
+    diagnostics: [...parseDiags, ...emitDiags],
+    chunks,
+    usesResult,
+  };
 }

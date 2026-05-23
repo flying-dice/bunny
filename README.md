@@ -203,16 +203,12 @@ export function addBook(rawIsbn: string, title: string): void {
 
 `tryNew` chains: a deep-validated field calls the inner struct's `tryNew` and propagates the `Err` upward. The error preserves the *innermost* field name + message so the caller sees exactly which constraint failed.
 
-When any compiled `.ts` uses Result, bunny prepends a self-contained ~25-line prelude defining the type and helpers (`Ok`, `Err`, `isOk`, `isErr`, `unwrap`, `unwrapOr`, `mapResult`, `mapErr`, `andThen`). No runtime dependency on bunny.
+When any compiled `.ts` uses `Result`, bunny writes two shared artefacts at the build root **once per build** (not per file):
 
-```ts
-// Auto-injected at the top of every compiled .ts that uses Result:
-export type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
-export type ConstraintError = { field: string; message: string };
-export function Ok<T>(value: T): Result<T, never> { return { ok: true, value }; }
-export function Err<E>(error: E): Result<never, E> { return { ok: false, error }; }
-// + isOk, isErr, unwrap, unwrapOr, mapResult, mapErr, andThen
-```
+- `bunny.d.ts` — ambient `declare global { type Result<T, E>; type ConstraintError; function Ok; function Err; function isOk; function isErr; function unwrap; function unwrapOr; function mapResult; function mapErr; function andThen; }`. The user's tsconfig picks it up automatically; compiled files reference `Result`, `Ok`, `Err` etc. without any explicit import.
+- `bunny.runtime.ts` — installs the matching runtime on `globalThis` (idempotently, so re-imports are no-ops). Each compiled `.ts` that uses `Result` gets a single `import "<rel>/bunny.runtime.ts";` at the top to guarantee the globals exist before the module body runs.
+
+No per-file inline prelude. No runtime dependency on `@flying-dice/bunny`.
 
 The `?` postfix operator (Rust's early-return shorthand) isn't supported yet — propagate manually with `if (!r.ok) return r;`.
 

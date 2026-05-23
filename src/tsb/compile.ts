@@ -3,7 +3,13 @@
  * writes the resulting TypeScript to disk (alongside the source by default,
  * or to a user-specified path).
  *
- * Source maps will land here when task #48 ships.
+ * When the compiled output uses `Result` / `Ok` / `Err`, a single shared
+ * `bunny.d.ts` (ambient types + function signatures) and
+ * `bunny.runtime.ts` (the runtime that installs the functions on
+ * `globalThis`) are written once per build at the build root. Each
+ * compiled `.ts` gets a side-effect `import` to the runtime so the
+ * globals exist when the module loads. Avoids per-file prelude
+ * injection.
  */
 import * as path from "node:path";
 import { appendSourceMappingURL, generateSourceMap } from "./sourcemap.ts";
@@ -16,6 +22,12 @@ export interface CompileOptions {
   output?: string;
   /** Absolute or dynamically importable paths for user-authored macros. */
   macroModules?: string[];
+  /**
+   * Directory to write the shared `bunny.d.ts` + `bunny.runtime.ts`
+   * artefacts when the compiled output uses `Result`. Defaults to the
+   * input file's directory.
+   */
+  buildRoot?: string;
 }
 
 export interface CompileResult {
@@ -23,6 +35,8 @@ export interface CompileResult {
   outputPath: string;
   ts: string;
   diagnostics: { message: string; span: { start: number; end: number } }[];
+  /** True if the bunny runtime artefacts were referenced. */
+  usesResult: boolean;
 }
 
 export async function compileFile(opts: CompileOptions): Promise<CompileResult> {
@@ -30,15 +44,25 @@ export async function compileFile(opts: CompileOptions): Promise<CompileResult> 
   const outputPath = opts.output
     ? path.resolve(opts.output)
     : defaultOutputPath(inputPath);
+  const buildRoot = opts.buildRoot
+    ? path.resolve(opts.buildRoot)
+    : path.dirname(inputPath);
 
   const source = await Bun.file(inputPath).text();
-  const { ts, diagnostics, chunks } = await transpile(source, {
+  const { ts, diagnostics, chunks, usesResult } = await transpile(source, {
     macroModules: opts.macroModules,
     sourcePath: inputPath,
   });
+
+  // Side-effect import that loads the bunny runtime (installs globalThis
+  // helpers). Computed relative to the compiled file's directory.
+  const tsWithImport = usesResult
+    ? prependRuntimeImport(ts, outputPath, buildRoot)
+    : ts;
+
   const mapPath = `${outputPath}.map`;
   const mapBasename = path.basename(mapPath);
-  const tsWithRef = appendSourceMappingURL(ts, mapBasename);
+  const tsWithRef = appendSourceMappingURL(tsWithImport, mapBasename);
   const sourceMap = generateSourceMap(
     path.basename(outputPath),
     path.basename(inputPath),
@@ -47,7 +71,10 @@ export async function compileFile(opts: CompileOptions): Promise<CompileResult> 
   );
   await Bun.write(outputPath, tsWithRef);
   await Bun.write(mapPath, JSON.stringify(sourceMap));
-  return { inputPath, outputPath, ts: tsWithRef, diagnostics };
+
+  if (usesResult) await writeBunnyArtefacts(buildRoot);
+
+  return { inputPath, outputPath, ts: tsWithRef, diagnostics, usesResult };
 }
 
 /**
@@ -81,13 +108,16 @@ export async function buildProject(opts: BuildOptions): Promise<string[]> {
   const log = opts.log ?? ((m) => console.log(m));
   const files = await collectTsbFiles(opts.sourceGlobs, opts.cwd);
   const written: string[] = [];
+  let anyUsesResult = false;
 
   const compileOne = async (file: string): Promise<void> => {
     try {
       const result = await compileFile({
         input: file,
         macroModules: opts.macroModules,
+        buildRoot: opts.cwd,
       });
+      if (result.usesResult) anyUsesResult = true;
       for (const d of result.diagnostics) {
         log(`tsb: ${path.relative(opts.cwd, file)}: ${d.message} (${d.span.start}..${d.span.end})`);
       }
@@ -99,6 +129,12 @@ export async function buildProject(opts: BuildOptions): Promise<string[]> {
   };
 
   for (const f of files) await compileOne(f);
+
+  if (anyUsesResult) {
+    await writeBunnyArtefacts(opts.cwd);
+    written.push(path.join(opts.cwd, "bunny.d.ts"));
+    written.push(path.join(opts.cwd, "bunny.runtime.ts"));
+  }
 
   if (opts.watch) {
     log(`watching ${files.length} file${files.length === 1 ? "" : "s"} for changes…`);
@@ -141,3 +177,80 @@ async function collectTsbFiles(globs: string[], cwd: string): Promise<string[]> 
   }
   return [...out].sort();
 }
+
+/**
+ * Compute the relative path from the compiled `.ts`'s directory to
+ * `bunny.runtime.ts` at the build root, and prepend a side-effect
+ * import. The import installs the runtime globals before the rest of
+ * the module body runs.
+ */
+function prependRuntimeImport(
+  ts: string,
+  outputPath: string,
+  buildRoot: string
+): string {
+  const rel = path.relative(path.dirname(outputPath), buildRoot);
+  const normalised = rel === "" ? "." : rel.startsWith(".") ? rel : `./${rel}`;
+  const importPath = `${normalised.replace(/\\/g, "/")}/bunny.runtime.ts`;
+  return `import ${JSON.stringify(importPath)};\n${ts}`;
+}
+
+/**
+ * Write the shared `bunny.d.ts` + `bunny.runtime.ts` artefacts at the
+ * build root. `bunny.d.ts` declares ambient types + function
+ * signatures so compiled `.ts` files don't need explicit imports;
+ * `bunny.runtime.ts` installs the runtime on `globalThis` when its
+ * side-effect import runs.
+ */
+async function writeBunnyArtefacts(buildRoot: string): Promise<void> {
+  await Bun.write(path.join(buildRoot, "bunny.d.ts"), BUNNY_DTS);
+  await Bun.write(path.join(buildRoot, "bunny.runtime.ts"), BUNNY_RUNTIME);
+}
+
+const BUNNY_DTS = `// AUTO-GENERATED by bunny. Provides ambient types and function
+// signatures referenced by compiled .ts files. The matching runtime
+// lives in \`bunny.runtime.ts\` and is loaded via a side-effect import
+// at the top of every compiled module that uses Result.
+declare global {
+  type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
+  type ConstraintError = { field: string; message: string };
+  function Ok<T>(value: T): Result<T, never>;
+  function Err<E>(error: E): Result<never, E>;
+  function isOk<T, E>(r: Result<T, E>): r is { ok: true; value: T };
+  function isErr<T, E>(r: Result<T, E>): r is { ok: false; error: E };
+  function unwrap<T, E>(r: Result<T, E>): T;
+  function unwrapOr<T, E>(r: Result<T, E>, fallback: T): T;
+  function mapResult<T, U, E>(r: Result<T, E>, fn: (value: T) => U): Result<U, E>;
+  function mapErr<T, E, F>(r: Result<T, E>, fn: (error: E) => F): Result<T, F>;
+  function andThen<T, U, E>(r: Result<T, E>, fn: (value: T) => Result<U, E>): Result<U, E>;
+}
+export {};
+`;
+
+const BUNNY_RUNTIME = `// AUTO-GENERATED by bunny. Installs the runtime globals declared in
+// \`bunny.d.ts\`. Compiled .ts files load this via a side-effect import
+// at the top of each module so the globals exist before user code
+// runs. Idempotent — re-imports are no-ops.
+type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
+
+const g = globalThis as Record<string, unknown>;
+if (typeof g.Ok !== "function") {
+  g.Ok = <T>(value: T): Result<T, never> => ({ ok: true, value });
+  g.Err = <E>(error: E): Result<never, E> => ({ ok: false, error });
+  g.isOk = <T, E>(r: Result<T, E>): boolean => r.ok;
+  g.isErr = <T, E>(r: Result<T, E>): boolean => !r.ok;
+  g.unwrap = <T, E>(r: Result<T, E>): T => {
+    if (r.ok) return r.value;
+    throw new Error(typeof r.error === "string" ? r.error : JSON.stringify(r.error));
+  };
+  g.unwrapOr = <T, E>(r: Result<T, E>, fallback: T): T => (r.ok ? r.value : fallback);
+  g.mapResult = <T, U, E>(r: Result<T, E>, fn: (value: T) => U): Result<U, E> =>
+    r.ok ? { ok: true, value: fn(r.value) } : r;
+  g.mapErr = <T, E, F>(r: Result<T, E>, fn: (error: E) => F): Result<T, F> =>
+    r.ok ? r : { ok: false, error: fn(r.error) };
+  g.andThen = <T, U, E>(r: Result<T, E>, fn: (value: T) => Result<U, E>): Result<U, E> =>
+    r.ok ? fn(r.value) : r;
+}
+
+export {};
+`;

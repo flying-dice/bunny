@@ -2,24 +2,27 @@ import { expect, test } from "bun:test";
 import { transpile } from "./transpile.ts";
 
 test("tryNew is not emitted when the struct has no constraints", async () => {
-  const { ts } = await transpile(`
+  const { ts, usesResult } = await transpile(`
     struct Foo { id: string }
     impl Foo { new(data: Foo): Foo { return data; } }
   `);
   expect(ts).not.toContain("tryNew");
-  expect(ts).not.toContain("Result runtime");
+  expect(usesResult).toBe(false);
 });
 
-test("tryNew emitted with the Result prelude when constraints exist", async () => {
-  const { ts } = await transpile(`
+test("tryNew emitted and usesResult flag set when constraints exist", async () => {
+  const { ts, usesResult } = await transpile(`
     struct Foo {
       #[minLength(1)]
       name: string,
     }
   `);
-  expect(ts).toContain("Result runtime");
+  expect(usesResult).toBe(true);
   expect(ts).toContain("tryNew(data: Foo): Result<Foo, ConstraintError>");
   expect(ts).toContain('return Err({ field: "name"');
+  // The shared bunny.d.ts/bunny.runtime.ts provide Result/Ok/Err
+  // ambiently; the compiled .ts no longer carries an inlined prelude.
+  expect(ts).not.toContain("Result runtime");
 });
 
 test("tryNew chains through nested struct tryNew calls", async () => {
