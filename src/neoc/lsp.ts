@@ -21,6 +21,13 @@
  *   - `textDocument/references` — word-boundary scan across every
  *     `.neoc` file in the workspace for occurrences of the symbol
  *     under the cursor.
+ *   - `textDocument/prepareRename` — validates the cursor position
+ *     and returns the symbol's range plus a placeholder for the
+ *     editor's rename prompt.
+ *   - `textDocument/rename` — word-boundary scan across every
+ *     `.neoc` file in the workspace, grouping `TextEdit`s by URI
+ *     into a `WorkspaceEdit`. Skips occurrences inside string
+ *     literals and line comments.
  */
 
 import { readFileSync } from "node:fs";
@@ -75,6 +82,27 @@ interface CodeAction {
   diagnostics?: LspDiagnostic[];
   edit?: WorkspaceEdit;
   isPreferred?: boolean;
+}
+
+/**
+ * Parameters for `textDocument/rename`. The editor sends the cursor
+ * position and the new name; the server responds with a workspace-wide
+ * `WorkspaceEdit` that replaces every occurrence.
+ */
+export interface RenameParams {
+  textDocument: { uri: string };
+  position: Position;
+  newName: string;
+}
+
+/**
+ * Result of `textDocument/prepareRename`. Returns the range of the
+ * symbol under the cursor plus a suggested placeholder for the rename
+ * prompt, or `null` when the cursor isn't on a renameable token.
+ */
+export interface PrepareRenameResult {
+  range: Range;
+  placeholder: string;
 }
 
 /**
@@ -217,6 +245,7 @@ export async function runLsp(): Promise<void> {
           codeActionProvider: { codeActionKinds: ["quickfix"] },
           documentSymbolProvider: true,
           referencesProvider: true,
+          renameProvider: { prepareProvider: true },
         },
         serverInfo: { name: "neoc neoc", version: "0.1.0" },
       });
@@ -290,6 +319,20 @@ export async function runLsp(): Promise<void> {
         ? await findReferences(doc, p.position, p.textDocument.uri, workspaceRoots)
         : [];
       respond(msg.id!, locations);
+      return;
+    }
+    if (msg.method === "textDocument/prepareRename") {
+      const p = msg.params as { textDocument: { uri: string }; position: Position };
+      const doc = docs.get(p.textDocument.uri);
+      respond(msg.id!, doc ? prepareRenameAt(doc, p.position, workspaceSymbols) : null);
+      return;
+    }
+    if (msg.method === "textDocument/rename") {
+      const p = msg.params as RenameParams;
+      const doc = docs.get(p.textDocument.uri);
+      if (!doc) { respond(msg.id!, null); return; }
+      const edit = await renameSymbol(doc, p.position, p.newName, workspaceRoots, p.textDocument.uri);
+      respond(msg.id!, edit);
       return;
     }
 
@@ -1425,6 +1468,201 @@ function selectionRangeForName(text: string, span: M.Span, name: string): Range 
   if (rel < 0) return offsetsToRange(text, span.start, span.end);
   const start = span.start + rel;
   return offsetsToRange(text, start, start + name.length);
+}
+
+// ----------------------------------------------------------------------------
+// Rename
+// ----------------------------------------------------------------------------
+
+/**
+ * Validates the rename position. Returns the range of the identifier
+ * under the cursor along with a placeholder (the current name) when
+ * the cursor sits on a renameable symbol — a declaration or reference
+ * to a struct, trait, function, or impl visible in the document or
+ * workspace. Returns `null` for keywords, primitives, or whitespace.
+ */
+export function prepareRenameAt(
+  doc: DocState,
+  pos: Position,
+  workspace: ReadonlyMap<string, WorkspaceSymbol>,
+): PrepareRenameResult | null {
+  const word = wordAt(doc.text, pos);
+  if (!word) return null;
+  if (!isRenameableSymbol(word.text, doc, workspace)) return null;
+  return { range: word.range, placeholder: word.text };
+}
+
+/**
+ * Builds a `WorkspaceEdit` that renames every occurrence of the symbol
+ * under the cursor to `newName`. Scans the document plus every `.neoc`
+ * file under every workspace root with a word-boundary regex, grouping
+ * edits by URI.
+ *
+ * Returns `null` when the cursor isn't on a renameable identifier.
+ *
+ * @remarks
+ * The scanner is lexical — it skips occurrences inside string literals
+ * (single, double, and backtick-quoted) and line comments (`//` and
+ * `///`). Block comments (`/* … *​/`) are also skipped. It does **not**
+ * attempt semantic disambiguation: a struct named `Foo` and a function
+ * also named `Foo` would be renamed together. The caller is expected
+ * to surface this caveat in the rename confirmation dialog.
+ */
+export async function renameSymbol(
+  doc: DocState,
+  pos: Position,
+  newName: string,
+  workspaceRoots: readonly string[],
+  docUri: string,
+): Promise<WorkspaceEdit | null> {
+  const word = wordAt(doc.text, pos);
+  if (!word) return null;
+  if (!isValidIdentifier(newName)) return null;
+  if (KEYWORDS.includes(word.text)) return null;
+  if (PRIMITIVE_TYPES.includes(word.text)) return null;
+  // No-op rename — return an empty workspace edit so the editor
+  // doesn't churn the file with identical text.
+  if (newName === word.text) return { changes: {} };
+  const oldName = word.text;
+
+  const changes: Record<string, TextEdit[]> = {};
+  const seen = new Set<string>();
+
+  // Always scan the open document first so unsaved edits get renamed
+  // even when the workspace copy on disk is stale.
+  const docEdits = collectOccurrenceEdits(doc.text, oldName, newName);
+  if (docEdits.length > 0) changes[docUri] = docEdits;
+  seen.add(docUri);
+
+  for (const root of workspaceRoots) {
+    const glob = new Bun.Glob("**/*.neoc");
+    for await (const rel of glob.scan({ cwd: root, onlyFiles: true })) {
+      const abs = `${root}/${rel}`;
+      const uri = pathToFileURL(abs).href;
+      if (seen.has(uri)) continue;
+      seen.add(uri);
+      let text: string;
+      try {
+        text = readFileSync(abs, "utf-8");
+      } catch {
+        continue;
+      }
+      const edits = collectOccurrenceEdits(text, oldName, newName);
+      if (edits.length > 0) changes[uri] = edits;
+    }
+  }
+
+  return { changes };
+}
+
+// Treat any identifier that resolves to a workspace symbol or a local
+// declaration as renameable. Falls back to "looks like an identifier"
+// so references to symbols declared in unparsed files still qualify.
+function isRenameableSymbol(
+  name: string,
+  doc: DocState,
+  workspace: ReadonlyMap<string, WorkspaceSymbol>,
+): boolean {
+  if (!isValidIdentifier(name)) return false;
+  if (KEYWORDS.includes(name)) return false;
+  if (PRIMITIVE_TYPES.includes(name)) return false;
+  if (doc.module) {
+    for (const p of doc.module.parts) {
+      if (p.kind === "opaque") continue;
+      if (p.name === name) return true;
+      if (p.kind === "struct") {
+        for (const f of p.fields) if (f.name === name) return true;
+      }
+      if (p.kind === "trait") {
+        for (const m of p.methods) if (m.name === name) return true;
+      }
+      if (p.kind === "impl") {
+        for (const m of p.methods) if (m.name === name) return true;
+      }
+    }
+  }
+  for (const sym of workspace.values()) {
+    if (sym.name === name) return true;
+  }
+  // Be permissive: any capitalised or snake-case identifier the user
+  // points at deserves a rename attempt — the workspace scan handles
+  // verification by simply finding (or not finding) other occurrences.
+  return true;
+}
+
+function isValidIdentifier(s: string): boolean {
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(s);
+}
+
+const PRIMITIVE_TYPES = ["string", "number", "boolean", "table", "nil"];
+
+/**
+ * Scan `text` for word-boundary occurrences of `oldName`, returning a
+ * `TextEdit` that replaces each one with `newName`. Skips ranges
+ * inside string literals (`"…"`, `'…'`, `` `…` ``), line comments
+ * (`//…`), and block comments (`/* … *​/`).
+ */
+function collectOccurrenceEdits(text: string, oldName: string, newName: string): TextEdit[] {
+  const edits: TextEdit[] = [];
+  const skip = buildSkipMask(text);
+  const pattern = new RegExp(`\\b${escapeRegex(oldName)}\\b`, "g");
+  let m: RegExpExecArray | null;
+  while ((m = pattern.exec(text)) !== null) {
+    const start = m.index;
+    const end = start + oldName.length;
+    if (skip[start]) continue;
+    edits.push({
+      range: offsetsToRange(text, start, end),
+      newText: newName,
+    });
+  }
+  return edits;
+}
+
+// Build a per-character boolean mask: `true` where the character sits
+// inside a comment or string literal and should be skipped by the
+// rename scanner. One pass over the source.
+function buildSkipMask(text: string): Uint8Array {
+  const mask = new Uint8Array(text.length);
+  let i = 0;
+  while (i < text.length) {
+    const c = text[i];
+    const next = text[i + 1];
+    if (c === "/" && next === "/") {
+      // Line comment — skip to end of line.
+      while (i < text.length && text[i] !== "\n") { mask[i] = 1; i++; }
+      continue;
+    }
+    if (c === "/" && next === "*") {
+      // Block comment — skip to matching */.
+      mask[i] = 1; mask[i + 1] = 1; i += 2;
+      while (i < text.length) {
+        if (text[i] === "*" && text[i + 1] === "/") {
+          mask[i] = 1; mask[i + 1] = 1; i += 2;
+          break;
+        }
+        mask[i] = 1; i++;
+      }
+      continue;
+    }
+    if (c === '"' || c === "'" || c === "`") {
+      const quote = c;
+      mask[i] = 1; i++;
+      while (i < text.length && text[i] !== quote) {
+        if (text[i] === "\\" && i + 1 < text.length) { mask[i] = 1; mask[i + 1] = 1; i += 2; continue; }
+        if (text[i] === "\n" && quote !== "`") break;
+        mask[i] = 1; i++;
+      }
+      if (i < text.length) { mask[i] = 1; i++; }
+      continue;
+    }
+    i++;
+  }
+  return mask;
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 // ----------------------------------------------------------------------------
