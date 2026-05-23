@@ -4,6 +4,7 @@
  * default, or to a user-specified path).
  */
 import * as path from "node:path";
+import * as os from "node:os";
 import { transpile } from "./compiler.ts";
 
 export interface CompileOptions {
@@ -118,3 +119,97 @@ async function collectNeocFiles(globs: string[], cwd: string): Promise<string[]>
   }
   return [...out].sort();
 }
+
+/**
+ * Compile every `.neoc` matching `sourceGlobs`, then execute each
+ * compiled `.lua` under `luau` (or `lua`) with a driver appended that
+ * runs every registration in `__neoc_tests`. Reports a pass/fail count.
+ */
+export interface RunTestsOptions {
+  sourceGlobs: string[];
+  cwd: string;
+  macroModules?: string[];
+  log?: (msg: string) => void;
+}
+
+export interface RunTestsResult {
+  passed: number;
+  failed: number;
+}
+
+export async function runTests(opts: RunTestsOptions): Promise<RunTestsResult> {
+  const log = opts.log ?? ((m) => console.log(m));
+  const runner = Bun.which("luau") ?? Bun.which("lua");
+  if (!runner) {
+    log(`neoc: no Lua runtime found. Install luau via \`brew install luau\`.`);
+    return { passed: 0, failed: 0 };
+  }
+
+  const files = await collectNeocFiles(opts.sourceGlobs, opts.cwd);
+  let passed = 0;
+  let failed = 0;
+
+  for (const file of files) {
+    try {
+      const result = await compileFile({
+        input: file,
+        macroModules: opts.macroModules,
+      });
+      for (const d of result.diagnostics) {
+        log(`neoc: ${path.relative(opts.cwd, file)}: ${d.message} (${d.span.start}..${d.span.end})`);
+      }
+
+      const driverSource = `${result.lua}\n${TEST_DRIVER}\n`;
+      const tmpPath = path.join(
+        os.tmpdir(),
+        `neoc-test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.lua`
+      );
+      await Bun.write(tmpPath, driverSource);
+      const proc = Bun.spawn({
+        cmd: [runner, tmpPath],
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [stdout, stderr] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+      ]);
+      await proc.exited;
+
+      const rel = path.relative(opts.cwd, file) || file;
+      const lines = stdout.split("\n").filter((l) => l.length > 0);
+      for (const line of lines) {
+        if (line.startsWith("PASS ")) {
+          passed++;
+          log(`${rel}: ${line}`);
+        } else if (line.startsWith("FAIL ")) {
+          failed++;
+          log(`${rel}: ${line}`);
+        } else {
+          log(`${rel}: ${line}`);
+        }
+      }
+      if (stderr.length > 0) {
+        log(`${rel}: ${stderr.trim()}`);
+      }
+    } catch (err) {
+      failed++;
+      log(`neoc: ${path.relative(opts.cwd, file)}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  log(`${passed} passed, ${failed} failed`);
+  return { passed, failed };
+}
+
+const TEST_DRIVER = `
+__neoc_tests = __neoc_tests or {}
+for _, t in ipairs(__neoc_tests) do
+  local ok, err = pcall(t.run)
+  if ok then
+    print("PASS " .. t.name)
+  else
+    print("FAIL " .. t.name .. ": " .. tostring(err))
+  end
+end
+`;
