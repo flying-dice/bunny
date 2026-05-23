@@ -10,6 +10,7 @@
  */
 import * as M from "../ast/index.ts";
 import type * as N from "../ast/nodes.generated.ts";
+import { lowerBlock } from "./lower-block.ts";
 import { lowerBody } from "./lower-match.ts";
 import { lowerRange } from "./lower-range.ts";
 import { lowerTry } from "./lower-try.ts";
@@ -22,7 +23,12 @@ import { parseToAst } from "./tree-sitter.ts";
 // output. Match runs first; range and try slot their rewrites in
 // around the IIFE that match emitted.
 function lowerAll(body: N.StatementBlockNode): string {
-  const afterMatch = lowerBody(body, body.text);
+  // Block runs first against the verbatim source so its statements
+  // and final-expression slices line up with AST positions. Inner
+  // match / range / try inside a block are not re-lowered for this
+  // pass — see specs/block-expression.md.
+  const afterBlock = lowerBlock(body, body.text);
+  const afterMatch = lowerBody(body, afterBlock);
   const afterRange = lowerRange(body, afterMatch);
   return lowerTry(body, afterRange);
 }

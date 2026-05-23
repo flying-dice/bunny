@@ -468,6 +468,7 @@ module.exports = grammar({
       $.arrow_function,
       $.array_literal,
       $.object_literal,
+      $.block_expression,
       $.template_string,
       $.identifier,
       $.number,
@@ -476,6 +477,25 @@ module.exports = grammar({
       $.null_literal,
       $.undefined_literal,
     ),
+
+    // ----- block expression ----------------------------------------
+    //
+    // Rust-style `{ stmt; stmt; final-expression }` — a brace-wrapped
+    // sequence of statements whose final, terminator-less expression
+    // is the value the block evaluates to. Lowering wraps it in a
+    // Lua IIFE so it stays an expression in the target. The form
+    // requires at least one statement so that bare `{ x = v, y = v }`
+    // tables written in opaque Lua bodies don't accidentally match —
+    // those have no `;` and no leading statement, so they parse as
+    // object_literal (when shaped like one) or fall through to an
+    // ERROR. Lower precedence than object_literal keeps `{ a: 1 }`
+    // parsing as an object.
+    block_expression: $ => prec(-1, seq(
+      '{',
+      repeat1($._statement),
+      field('final', $._expression),
+      '}',
+    )),
 
     // ----- try (postfix `?`) expression -----------------------------
     //

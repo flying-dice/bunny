@@ -237,3 +237,39 @@ foo().bar(baz);
       property: (identifier))
     arguments: (arguments
       (identifier))))
+
+==================
+block expression — trivial
+==================
+
+let x = { let _ = 0; 42 };
+
+---
+
+(source_file
+  (variable_declaration
+    name: (identifier)
+    value: (block_expression
+      (variable_declaration
+        name: (identifier)
+        value: (number))
+      final: (number))))
+
+==================
+block expression — let then expression
+==================
+
+let x = { let a = 1; a + 1 };
+
+---
+
+(source_file
+  (variable_declaration
+    name: (identifier)
+    value: (block_expression
+      (variable_declaration
+        name: (identifier)
+        value: (number))
+      final: (binary_expression
+        (identifier)
+        (number)))))
