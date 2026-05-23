@@ -1,7 +1,7 @@
-//! Zed extension for the `tsb` language.
+//! Zed extension for the `neoc` language.
 //!
-//! Boots `bunny lsp` (or `bun src/cli.ts lsp` when `bunny` isn't on PATH)
-//! as the language server for `.tsb` files. The LSP delivers diagnostics,
+//! Boots `neoc lsp` (or `bun src/cli.ts lsp` when `neoc` isn't on PATH)
+//! as the language server for `.neoc` files. The LSP delivers diagnostics,
 //! completion, hover, and goto-definition.
 
 use zed_extension_api::{
@@ -20,8 +20,8 @@ impl zed::Extension for TsbExtension {
         _server_id: &LanguageServerId,
         worktree: &Worktree,
     ) -> Result<Command> {
-        // Prefer the installed `bunny` binary if it's on PATH.
-        if let Some(bin) = worktree.which("bunny") {
+        // Prefer the installed `neoc` binary if it's on PATH.
+        if let Some(bin) = worktree.which("neoc") {
             return Ok(Command {
                 command: bin,
                 args: vec!["lsp".into()],

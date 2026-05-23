@@ -12,7 +12,7 @@
 - **Given** a function returning `Result<T, E>`, **when** the caller wants the value, **then** matching on `ok` is the only way to extract it — there is no implicit unwrapping.
 
 ## Conventions
-- **Given** an error case, **when** modelled, **then** `E` is typically a tsb struct (or a TS union of structs), so each error variant carries its own structured payload.
+- **Given** an error case, **when** modelled, **then** `E` is typically a neoc struct (or a TS union of structs), so each error variant carries its own structured payload.
 
 ## Ambient injection
-- **Given** any tsb file, **when** transpiled, **then** the emitter prepends an ambient declaration of `Result`, `Ok`, `Err`, and `ConstraintError` so user code can use them without an import.
+- **Given** any neoc file, **when** transpiled, **then** the emitter prepends an ambient declaration of `Result`, `Ok`, `Err`, and `ConstraintError` so user code can use them without an import.

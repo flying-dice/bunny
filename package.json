@@ -1,30 +1,21 @@
 {
-  "name": "@flying-dice/bunny",
+  "name": "@flying-dice/neoc",
   "module": "src/index.ts",
   "type": "module",
   "bin": {
-    "bunny": "./src/cli.ts"
+    "neoc": "./src/cli.ts"
   },
   "exports": {
     ".": "./src/index.ts",
-    "./ast": "./src/tsb/ast/index.ts",
-    "./parser": "./src/tsb/parser/index.ts",
-    "./codegen-ts": "./src/tsb/codegen/typescript/index.ts",
-    "./compiler": "./src/tsb/compiler.ts",
-    "./macro": "./src/tsb/macros/api.ts"
+    "./ast": "./src/neoc/ast/index.ts",
+    "./parser": "./src/neoc/parser/index.ts",
+    "./codegen-lua": "./src/neoc/codegen/lua/index.ts",
+    "./compiler": "./src/neoc/compiler.ts",
+    "./macro": "./src/neoc/macros/api.ts"
   },
   "scripts": {
     "test": "bun test",
-    "example:api": "cd examples/api && bun ../../src/cli.ts build -s '**/*.tsb'",
-    "example:csr": "cd examples/csr && bun ../../src/cli.ts build -s '**/*.tsb'",
-    "example:ssr": "cd examples/ssr && bun ../../src/cli.ts build -s '**/*.tsb'",
-    "example:cli": "cd examples/cli && bun ../../src/cli.ts build -s '**/*.tsb'",
-    "example:sql": "cd examples/sql && bun ../../src/cli.ts build -s '**/*.tsb'",
-    "example:errors": "cd examples/errors && bun ../../src/cli.ts build -s '**/*.tsb'",
-    "example:all": "bun run example:api && bun run example:csr && bun run example:ssr && bun run example:cli && bun run example:sql",
-    "example:api:serve": "bun examples/api/server.ts",
-    "example:csr:serve": "bun --hot examples/csr/server.ts",
-    "example:ssr:serve": "bun examples/ssr/server.ts",
+    "example": "cd examples && bun ../src/cli.ts build -s 'showcase.neoc'",
     "typecheck": "tsc --noEmit",
     "lint": "biome lint .",
     "format": "biome format --write .",
@@ -33,16 +24,12 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.15",
-    "@types/bun": "latest",
-    "@types/react": "^19.2.15",
-    "@types/react-dom": "^19.2.3"
+    "@types/bun": "latest"
   },
   "peerDependencies": {
     "typescript": "^5"
   },
   "dependencies": {
-    "react": "^19.2.6",
-    "react-dom": "^19.2.6",
     "web-tree-sitter": "^0.26.9"
   }
 }

@@ -1,8 +1,8 @@
 # CLAUDE.md
 
-Guidance for Claude (and any LLM agent) working in the **Bunny** repo.
+Guidance for Claude (and any LLM agent) working in the **Neoc** repo.
 
-> 🐰 Bunny — a Rust-flavoured TypeScript dialect for Bun. `.tsb` → plain `.ts`.
+> 🐰 Neoc — a Rust-flavoured TypeScript dialect for Bun. `.neoc` → plain `.ts`.
 
 ---
 
@@ -40,7 +40,7 @@ Some things stay exact and complete. **Never** abbreviate or stylize these:
 | API names | Exact. `#[derive(Clone)]` stays `#[derive(Clone)]`. |
 | Type signatures | Exact. Never trim a type. |
 | Error / log messages | Quote verbatim. |
-| Commands | Exact: `bunny build`, `bunny compile`, `bunny lsp`. |
+| Commands | Exact: `neoc build`, `neoc compile`, `neoc lsp`. |
 | File paths, env vars | Exact. |
 | `tsdoc` doc comments | Full, normal English — see below. |
 | Legal, LICENSE, security notes | Complete and careful. |
@@ -75,9 +75,9 @@ Prose around a code sample stays terse. The doc comment itself stays complete. K
 
 ---
 
-## Voice Stays Bunny
+## Voice Stays Neoc
 
-Terse, but the brand stays warm. Bunny is playful but professional. Keep:
+Terse, but the brand stays warm. Neoc is playful but professional. Keep:
 - Friendly error messages. Help the user, don't scold.
 - Rabbit/spring puns **only when they make something clearer or more memorable**. Puns for their own sake get cut.
 - Easter eggs welcome — hidden in the CLI, docs, and source. Discoverable, never in the way.

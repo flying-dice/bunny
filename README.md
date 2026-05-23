@@ -1,24 +1,24 @@
-# Bunny
+# Neoc
 
-> 🐰 A Rust-flavoured TypeScript dialect for Bun. `.tsb` files transpile to plain `.ts` — runtime has zero dependency on `@flying-dice/bunny`.
+> 🐰 A Rust-flavoured TypeScript dialect for Bun. `.neoc` files transpile to plain `.ts` — runtime has zero dependency on `@flying-dice/neoc`.
 
-Bunny adds **`struct`**, **`impl`**, **`match`**, and **`#[macro]` attributes** to TypeScript. The compiler transpiles `.tsb` → `.ts`, and each compiled file exports per-file consts (`routes`, `openapi`, `client`, `commands`, `listeners`) built from the macros in that file. You wire the app yourself by importing and spreading those consts in your `server.ts` / `cli.ts` — no project-wide assemblers, no generated wiring files, no runtime container.
+Neoc adds **`struct`**, **`impl`**, **`match`**, and **`#[macro]` attributes** to TypeScript. The compiler transpiles `.neoc` → `.ts`, and each compiled file exports per-file consts (`routes`, `openapi`, `client`, `commands`, `listeners`) built from the macros in that file. You wire the app yourself by importing and spreading those consts in your `server.ts` / `cli.ts` — no project-wide assemblers, no generated wiring files, no runtime container.
 
-You write `.tsb`; bunny writes `.ts`. After codegen, your app has no runtime dependency on this package.
+You write `.neoc`; neoc writes `.ts`. After codegen, your app has no runtime dependency on this package.
 
 ## Install
 
 ```bash
-bun add -d @flying-dice/bunny
+bun add -d @flying-dice/neoc
 ```
 
 Requires Bun ≥ 1.3 and TypeScript ≥ 5.
 
-## Hello, tsb
+## Hello, neoc
 
-`controllers/Products.tsb`:
+`controllers/Products.neoc`:
 
-```tsb
+```neoc
 #[derive(Clone, Equals, ToJson)]
 struct Product {
   #[format("uuid")]
@@ -43,7 +43,7 @@ export function createProduct(body: Product): Product {
 Compile it:
 
 ```bash
-bunny build -s '**/*.tsb'
+neoc build -s '**/*.neoc'
 ```
 
 `controllers/Products.ts` is plain TypeScript: a `type Product`, a `const Product` with `new` / `clone` / `equals` / `toJson` methods, the two route functions, and three per-file consts:
@@ -80,9 +80,9 @@ For more controllers, add more imports + more `...spreads`. No assembler step, n
 ## Commands
 
 ```
-bunny build    -s <glob>... [-w]      Compile every matching .tsb to sibling .ts.
-bunny compile  <file.tsb> [-o out.ts] Transpile one file.
-bunny lsp                             Stdio language server (used by editors).
+neoc build    -s <glob>... [-w]      Compile every matching .neoc to sibling .ts.
+neoc compile  <file.neoc> [-o out.ts] Transpile one file.
+neoc lsp                             Stdio language server (used by editors).
 ```
 
 `--source` / `-s` is repeatable; `--macro` loads user-authored macro modules; `--watch` re-runs `build` on change.
@@ -93,7 +93,7 @@ bunny lsp                             Stdio language server (used by editors).
 
 `struct` declares a data shape; `impl` declares its methods and factory. Each struct emits both a `type` alias *and* a `const` carrying its `new(data)` factory and any derived methods.
 
-```tsb
+```neoc
 struct Money {
   amount: number,
   currency: string,
@@ -110,13 +110,13 @@ impl Money {
 
 Methods take `self` as their first parameter (no `this`). Call them via the const: `Money.add(a, b)`.
 
-If you write a `struct` with no `impl`, bunny synthesises a minimal one whenever the struct has derives, trait impls, or field constraints, so `Foo.new(data)` always exists.
+If you write a `struct` with no `impl`, neoc synthesises a minimal one whenever the struct has derives, trait impls, or field constraints, so `Foo.new(data)` always exists.
 
 ### Field constraints
 
 Validation guards inject into the synthesised or explicit `new(data)`. They throw on the first failing field.
 
-```tsb
+```neoc
 struct Email {
   #[format("email")]
   value: string,
@@ -159,7 +159,7 @@ Same-module struct fields chain automatically (no `#[deep]` needed). Cross-modul
 
 Every struct's type carries a hidden `readonly _struct?: "<Name>"` brand that `<Name>.new(...)` and `<Name>.tryNew(...)` populate. Match patterns dispatch on the brand by **struct name** — no hand-written `kind` discriminator. The natural way to model "one of N errors" or any sum type:
 
-```tsb
+```neoc
 struct BadNumber { input: string }
 struct UnknownOp { op: string }
 struct DivByZero {}
@@ -199,7 +199,7 @@ Every struct with constraints (or whose nested fields have constraints) emits **
 - `Foo.new(data): Foo` — throws on the first violation. Backwards-compatible, useful when failure is genuinely exceptional.
 - `Foo.tryNew(data): Result<Foo, ConstraintError>` — returns `Err({ field, message })` on the first violation. Pattern-match the Result instead of wrapping in try/catch.
 
-```tsb
+```neoc
 struct AddBookDto {
   #[deep]
   isbn: Isbn,
@@ -220,12 +220,12 @@ export function addBook(rawIsbn: string, title: string): void {
 
 `tryNew` chains: a deep-validated field calls the inner struct's `tryNew` and propagates the `Err` upward. The error preserves the *innermost* field name + message so the caller sees exactly which constraint failed.
 
-When any compiled `.ts` uses `Result`, bunny writes two shared artefacts at the build root **once per build** (not per file):
+When any compiled `.ts` uses `Result`, neoc writes two shared artefacts at the build root **once per build** (not per file):
 
-- `bunny.d.ts` — ambient `declare global { type Result<T, E>; type ConstraintError; function Ok; function Err; function isOk; function isErr; function unwrap; function unwrapOr; function mapResult; function mapErr; function andThen; }`. The user's tsconfig picks it up automatically; compiled files reference `Result`, `Ok`, `Err` etc. without any explicit import.
-- `bunny.runtime.ts` — installs the matching runtime on `globalThis` (idempotently, so re-imports are no-ops). Each compiled `.ts` that uses `Result` gets a single `import "<rel>/bunny.runtime.ts";` at the top to guarantee the globals exist before the module body runs.
+- `neoc.d.ts` — ambient `declare global { type Result<T, E>; type ConstraintError; function Ok; function Err; function isOk; function isErr; function unwrap; function unwrapOr; function mapResult; function mapErr; function andThen; }`. The user's tsconfig picks it up automatically; compiled files reference `Result`, `Ok`, `Err` etc. without any explicit import.
+- `neoc.runtime.ts` — installs the matching runtime on `globalThis` (idempotently, so re-imports are no-ops). Each compiled `.ts` that uses `Result` gets a single `import "<rel>/neoc.runtime.ts";` at the top to guarantee the globals exist before the module body runs.
 
-No per-file inline prelude. No runtime dependency on `@flying-dice/bunny`.
+No per-file inline prelude. No runtime dependency on `@flying-dice/neoc`.
 
 The `?` postfix operator (Rust's early-return shorthand) isn't supported yet — propagate manually with `if (!r.ok) return r;`.
 
@@ -233,7 +233,7 @@ The `?` postfix operator (Rust's early-return shorthand) isn't supported yet —
 
 Declare a contract once; implement it for many structs. The trait body lists method signatures (required) and default methods with `{}` bodies (inherited unless overridden).
 
-```tsb
+```neoc
 trait Display {
   display(self: Self): string;
   priceLabel(self: Self): string {
@@ -253,7 +253,7 @@ Limits: same-module trait lookup only (cross-module impls work but don't fill de
 
 ### From / Into
 
-```tsb
+```neoc
 struct ProductId { value: string }
 
 impl From<string> for ProductId {
@@ -279,7 +279,7 @@ Each macro contributes an entry to a per-file `export const` record. The user me
 | `#[onEvent("EventName")]` | `listeners` (`{ EventName: [handler, …] }`) |
 | `#[sql("query-name")]` | replaces the function body with a prepared-statement call against the `db` param |
 
-```tsb
+```neoc
 #[get("/products/:id")]
 export function getProduct(id: string): Product { … }
 
@@ -300,11 +300,11 @@ export async function logBookAdded(event: BookAdded): Promise<void> { … }
 
 ### User macros
 
-A macro module exports an array of macros that bunny loads via `--macro`:
+A macro module exports an array of macros that neoc loads via `--macro`:
 
 ```ts
 // my-macros.ts
-import type { FieldConstraintMacro } from "@flying-dice/bunny/macro";
+import type { FieldConstraintMacro } from "@flying-dice/neoc/macro";
 
 const positive: FieldConstraintMacro = {
   kind: "field-constraint",
@@ -318,10 +318,10 @@ export default [positive];
 ```
 
 ```bash
-bunny compile main.tsb --macro ./my-macros.ts
+neoc compile main.neoc --macro ./my-macros.ts
 ```
 
-The `@flying-dice/bunny/macro` import resolves to a type-only module, so the macro file ships with zero runtime dependency on bunny itself.
+The `@flying-dice/neoc/macro` import resolves to a type-only module, so the macro file ships with zero runtime dependency on neoc itself.
 
 ## Examples
 
@@ -331,14 +331,14 @@ Each example regenerates with `bun run example:<name>` and includes a runnable e
 | --- | --- |
 | [`examples/api`](./examples/api/) | structs + derives, `#[get/post]`, per-controller `routes` + `openapi` merged in `server.ts` |
 | [`examples/cli`](./examples/cli/) | `#[command]`, per-file `commands` const + 30-line `cli.ts` dispatcher, `#[deep]` validation chain (Isbn → AddBookDto → Book) |
-| [`examples/csr`](./examples/csr/) | api backend in `.tsb`, React frontend imports the per-file `client` const for typed fetch |
+| [`examples/csr`](./examples/csr/) | api backend in `.neoc`, React frontend imports the per-file `client` const for typed fetch |
 | [`examples/sql`](./examples/sql/) | `#[sql]` against `bun:sqlite` (incl. `RETURNING`); per-file `listeners` + 6-line bus in `run.ts` |
-| [`examples/ssr`](./examples/ssr/) | `.tsb` entities/services with `.tsx` controllers streaming HTML via `renderToReadableStream` |
+| [`examples/ssr`](./examples/ssr/) | `.neoc` entities/services with `.tsx` controllers streaming HTML via `renderToReadableStream` |
 | [`examples/errors`](./examples/errors/) | Dedicated Result + `match` demo. Calc command with a tagged-union `CalcError`, register command with deep `tryNew` validation, all dispatch via `match` patterns (binding + checks) |
 
 ## Editor support
 
-A Zed extension lives at [`zed/`](./zed/). Install it via **zed: install dev extension** in the Zed command palette. It launches `bunny lsp` for diagnostics, completion, hover, and goto-definition. See [`zed/README.md`](./zed/README.md).
+A Zed extension lives at [`zed/`](./zed/). Install it via **zed: install dev extension** in the Zed command palette. It launches `neoc lsp` for diagnostics, completion, hover, and goto-definition. See [`zed/README.md`](./zed/README.md).
 
 A VS Code scaffold lives at [`vscode/`](./vscode/) but is unfinished — install Zed for the maintained editor path.
 
@@ -348,7 +348,7 @@ Honest caveats:
 
 - The TextMate grammar reuses TypeScript's, so `struct`/`impl`/`match`/`#[…]` aren't highlighted as keywords. The LSP still provides completion and diagnostics.
 - The route adapter binds non-path params from the JSON body on POST/PUT/PATCH and from the query string elsewhere. There's no body-shape inference — the user's function signature is the contract.
-- The macros emit per-file consts; cross-file merging is your responsibility (one line per import + spread). Adding a new controller means adding a new import to `server.ts`. If you'd rather have auto-discovery, write a glob-import in your entry — bunny's compiler doesn't do it for you on purpose.
+- The macros emit per-file consts; cross-file merging is your responsibility (one line per import + spread). Adding a new controller means adding a new import to `server.ts`. If you'd rather have auto-discovery, write a glob-import in your entry — neoc's compiler doesn't do it for you on purpose.
 - `match` patterns cover literals, identifiers, and one-level discriminants — no nested destructuring or guard clauses yet.
 
 ## License

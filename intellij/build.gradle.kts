@@ -4,7 +4,7 @@ plugins {
   id("org.jetbrains.intellij") version "1.17.4"
 }
 
-group = "com.flyingdice.tsb"
+group = "com.flyingdice.neoc"
 version = providers.gradleProperty("pluginVersion").get()
 
 repositories { mavenCentral() }

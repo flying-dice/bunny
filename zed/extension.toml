@@ -1,23 +1,23 @@
-id = "tsb"
-name = "tsb"
-description = "tsb — Rust-flavoured TypeScript dialect, language support."
+id = "neoc"
+name = "neoc"
+description = "neoc — Rust-flavoured TypeScript dialect, language support."
 version = "1.0.0"
 schema_version = 1
 authors = ["Jonathan Turnock"]
 repository = "https://github.com/flying-dice/bun-oas"
 
-[language_servers.tsb]
-name = "tsb"
-languages = ["tsb"]
+[language_servers.neoc]
+name = "neoc"
+languages = ["neoc"]
 
-# tsb grammar — defined from scratch in `tree-sitter-tsb/`. Test
-# corpus at `tree-sitter-tsb/test/corpus/` — run `cd tree-sitter-tsb
+# neoc grammar — defined from scratch in `tree-sitter-neoc/`. Test
+# corpus at `tree-sitter-neoc/test/corpus/` — run `cd tree-sitter-neoc
 # && npm test` from the repo root.
 #
 # The grammar source lives in this repo, so the `repository` URL
 # points at a local file:// path. Zed clones it at the pinned commit
 # (initialised by `setup-grammar.sh`).
-[grammars.tsb]
-repository = "file:///Users/jonathanturnock/Projects/bun-oas/zed/tree-sitter-tsb"
+[grammars.neoc]
+repository = "file:///Users/jonathanturnock/Projects/bun-oas/zed/tree-sitter-neoc"
 commit = "980a450f94a2917b023a9036f86a88fd8ac971a3"
 path = ""

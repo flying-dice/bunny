@@ -7,7 +7,7 @@
 - **Given** any value of a struct union type, **when** inspected at runtime, **then** its `_struct` brand identifies which variant it is.
 
 ## Why not `enum`
-- **Given** the `enum` keyword, **when** considered, **then** it is reserved by TypeScript and conflicts when tsb output is consumed by TS; tsb deliberately uses struct unions instead.
+- **Given** the `enum` keyword, **when** considered, **then** it is reserved by TypeScript and conflicts when neoc output is consumed by TS; neoc deliberately uses struct unions instead.
 - **Given** a struct union, **when** combined with `match` on a struct pattern, **then** discrimination is exhaustive without ceremony.
 
 ## Construction

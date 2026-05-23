@@ -1,7 +1,0 @@
-#[derive(Event)]
-struct BookAdded {
-  #[format("uuid")]
-  id: string,
-  #[minLength(1), maxLength(200)]
-  title: string,
-}

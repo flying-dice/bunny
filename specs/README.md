@@ -1,6 +1,6 @@
-# tsb specs
+# neoc specs
 
-Behaviour specifications for the tsb language and its editor support. Two files per feature:
+Behaviour specifications for the neoc language and its editor support. Two files per feature:
 
 - `<feature>.md` — semantics of the feature itself.
 - `ide-<feature>.md` — what the editor should do for it (highlighting, completion, parsing, transpile, run).
@@ -26,4 +26,4 @@ Style: short, BDD-style **Given / When / Then** bullets, grouped into the releva
 
 ## Roadmap
 
-Features common to major languages that tsb does not yet support — see [roadmap.md](roadmap.md) for the full list and rationale.
+Features common to major languages that neoc does not yet support — see [roadmap.md](roadmap.md) for the full list and rationale.

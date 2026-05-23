@@ -3,9 +3,9 @@ export { runCli } from "./cli.ts";
 
 // Tsb compiler surface — programmatic access for tools that want to
 // transpile or assemble outside the CLI.
-export type { TranspileOptions, TranspileResult } from "./tsb/compiler.ts";
-export { transpile } from "./tsb/compiler.ts";
-export type { BuildOptions, CompileOptions, CompileResult } from "./tsb/driver.ts";
-export { buildProject, compileFile } from "./tsb/driver.ts";
-export type { Macro, MacroContext } from "./tsb/macros/registry.ts";
-export { MacroRegistry } from "./tsb/macros/registry.ts";
+export type { TranspileOptions, TranspileResult } from "./neoc/compiler.ts";
+export { transpile } from "./neoc/compiler.ts";
+export type { BuildOptions, CompileOptions, CompileResult } from "./neoc/driver.ts";
+export { buildProject, compileFile } from "./neoc/driver.ts";
+export type { Macro, MacroContext } from "./neoc/macros/registry.ts";
+export { MacroRegistry } from "./neoc/macros/registry.ts";

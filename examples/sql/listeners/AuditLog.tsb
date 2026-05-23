@@ -1,6 +1,0 @@
-import type { BookAdded } from "../events/BookAdded.ts";
-
-#[onEvent(BookAdded)]
-export async function logBookAdded(event: BookAdded): Promise<void> {
-  console.log(`[audit] book added: ${event.id} (${event.title})`);
-}

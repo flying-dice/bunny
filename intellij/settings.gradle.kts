@@ -1,4 +1,4 @@
-rootProject.name = "tsb-intellij"
+rootProject.name = "neoc-intellij"
 
 pluginManagement {
   repositories {

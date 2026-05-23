@@ -1,3 +1,0 @@
-export function nextId(): string {
-  return crypto.randomUUID();
-}

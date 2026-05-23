@@ -17,4 +17,4 @@
 - **Given** a function declared to return `Result<T, E>`, **when** any return path produces a value that isn't `Ok` or `Err`, **then** TypeScript's downstream checker reports the type error.
 
 ## Transpile
-- **Given** any tsb module, **when** transpiled, **then** the emitter injects the ambient `Result`, `Ok`, `Err`, and `ConstraintError` declarations so user code may reference them without an import.
+- **Given** any neoc module, **when** transpiled, **then** the emitter injects the ambient `Result`, `Ok`, `Err`, and `ConstraintError` declarations so user code may reference them without an import.

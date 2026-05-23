@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 import * as path from "node:path";
 import { parseArgs } from "node:util";
-import { buildProject, compileFile } from "./tsb/driver.ts";
-import { runLsp } from "./tsb/lsp.ts";
+import { buildProject, compileFile } from "./neoc/driver.ts";
+import { runLsp } from "./neoc/lsp.ts";
 
 export interface RunCliOptions {
   argv?: string[];
@@ -30,13 +30,13 @@ export async function runCli(opts: RunCliOptions = {}): Promise<string[]> {
   const macroModules = (values.macro ?? []).map((p: string) => path.resolve(cwd, p));
   const sourceGlobs = values.source ?? [];
 
-  // `bunny lsp` — stdio language server for editor extensions.
+  // `neoc lsp` — stdio language server for editor extensions.
   if (cmd === "lsp") {
     await runLsp();
     return [];
   }
 
-  // `bunny build -s <glob>... [--watch]` — multi-file tsb compile.
+  // `neoc build -s <glob>... [--watch]` — multi-file neoc compile.
   if (cmd === "build") {
     requireSource(sourceGlobs);
     return await buildProject({
@@ -48,11 +48,11 @@ export async function runCli(opts: RunCliOptions = {}): Promise<string[]> {
     });
   }
 
-  // `bunny compile <file.tsb> [-o out.ts]` — one-shot tsb transpile.
+  // `neoc compile <file.neoc> [-o out.ts]` — one-shot neoc transpile.
   if (cmd === "compile") {
     const input = positionals[1];
     if (!input) {
-      throw new Error(`bunny: compile requires an input file.\n\n${USAGE}`);
+      throw new Error(`neoc: compile requires an input file.\n\n${USAGE}`);
     }
     const result = await compileFile({
       input: path.resolve(cwd, input),
@@ -60,18 +60,18 @@ export async function runCli(opts: RunCliOptions = {}): Promise<string[]> {
       macroModules,
     });
     for (const d of result.diagnostics) {
-      log(`tsb: ${d.message} (${d.span.start}..${d.span.end})`);
+      log(`neoc: ${d.message} (${d.span.start}..${d.span.end})`);
     }
     log(`wrote ${path.relative(cwd, result.outputPath) || result.outputPath}`);
     return [result.outputPath];
   }
 
-  throw new Error(`bunny: unknown command "${cmd}"\n\n${USAGE}`);
+  throw new Error(`neoc: unknown command "${cmd}"\n\n${USAGE}`);
 }
 
 function requireSource(globs: readonly string[]): void {
   if (globs.length === 0) {
-    throw new Error(`bunny: -s/--source <glob> is required for this command.\n\n${USAGE}`);
+    throw new Error(`neoc: -s/--source <glob> is required for this command.\n\n${USAGE}`);
   }
 }
 
@@ -101,18 +101,18 @@ function parse(argv: string[]): { values: CliValues; positionals: string[] } {
       },
     }) as { values: CliValues; positionals: string[] };
   } catch (err) {
-    throw new Error(`bunny: ${err instanceof Error ? err.message : String(err)}\n\n${USAGE}`);
+    throw new Error(`neoc: ${err instanceof Error ? err.message : String(err)}\n\n${USAGE}`);
   }
 }
 
 // ---------------------------------------------------------------------------
 
 const USAGE = `\
-Usage: bunny <command> [flags]
+Usage: neoc <command> [flags]
 
 Commands:
-  build    -s <glob>... [-w]      Compile every matching .tsb to sibling .ts.
-  compile  <file.tsb> [-o out.ts] Transpile a single .tsb file.
+  build    -s <glob>... [-w]      Compile every matching .neoc to sibling .ts.
+  compile  <file.neoc> [-o out.ts] Transpile a single .neoc file.
   lsp                             Stdio language server (used by editors).
 
 Flags:

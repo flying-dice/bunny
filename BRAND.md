@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🐰 Bunny
+# 🐰 Neoc
 
 ### A Rust-flavoured TypeScript dialect for Bun
 
@@ -10,13 +10,13 @@
 
 ---
 
-## What is Bunny?
+## What is Neoc?
 
-Bunny is a TypeScript dialect (`.tsb`) and small compiler for the [Bun](https://bun.sh) runtime. It adds `struct`, `impl`, `match`, and `#[macro]` attributes on top of TypeScript and transpiles to plain `.ts` — the runtime carries zero dependency on bunny.
+Neoc is a TypeScript dialect (`.neoc`) and small compiler for the [Bun](https://bun.sh) runtime. It adds `struct`, `impl`, `match`, and `#[macro]` attributes on top of TypeScript and transpiles to plain `.ts` — the runtime carries zero dependency on neoc.
 
 The macro system turns idiomatic Rust patterns (derives, From/Into, attribute-driven codegen) into typed TypeScript. Project-level assemblers harvest macro descriptors across files to emit a route table, a typed fetch client, a CLI dispatcher, a typed event bus, and an OpenAPI 3.1 spec.
 
-If you've ever wished Rust's struct/impl/derive ergonomics existed in TypeScript without giving up the runtime, that's Bunny.
+If you've ever wished Rust's struct/impl/derive ergonomics existed in TypeScript without giving up the runtime, that's Neoc.
 
 ---
 
@@ -25,25 +25,25 @@ If you've ever wished Rust's struct/impl/derive ergonomics existed in TypeScript
 Three ideas hold the whole brand together. Everything — naming, docs, CLI output, visuals — should ladder back to at least one of them.
 
 ### 🥕 Fast
-Bunny rides on Bun, one of the fastest JavaScript runtimes available. Rabbits are quick. The framework should *feel* quick — fast cold starts, fast hot reload, fast DX. Speed isn't a feature we mention; it's the baseline expectation.
+Neoc rides on Bun, one of the fastest JavaScript runtimes available. Rabbits are quick. The framework should *feel* quick — fast cold starts, fast hot reload, fast DX. Speed isn't a feature we mention; it's the baseline expectation.
 
 ### 🌱 Spring
-"Spring" works on two levels: the season of new growth, and the spring in a rabbit's hop. Bunny is a fresh take on TypeScript — Rust-flavoured ergonomics, no runtime container, code that runs as plain TS. The brand carries the seasonal energy without owing anything to any particular framework.
+"Spring" works on two levels: the season of new growth, and the spring in a rabbit's hop. Neoc is a fresh take on TypeScript — Rust-flavoured ergonomics, no runtime container, code that runs as plain TS. The brand carries the seasonal energy without owing anything to any particular framework.
 
 ### 🥚 Easter Eggs
-Bunny has personality. The name itself is the first easter egg: *Bun → Bunny*, and bunnies bring Easter, and Easter is Spring. We lean into that loop everywhere — hidden surprises in the CLI, playful (never cringe) docs, friendly error messages. A framework people enjoy talking about.
+Neoc has personality. The name itself is the first easter egg: *Bun → Neoc*, and bunnies bring Easter, and Easter is Spring. We lean into that loop everywhere — hidden surprises in the CLI, playful (never cringe) docs, friendly error messages. A framework people enjoy talking about.
 
 ---
 
 ## The Name
 
-> **Bun → Bunny.** Same root, more whimsy.
+> **Bun → Neoc.** Same root, more whimsy.
 
 The name does a remarkable amount of work:
 
 - **Sounds like Bun** — instantly signals the runtime it's built on.
 - **Bunnies are fast** — reinforces the speed identity.
-- **Bunny → Easter → Spring** — connects to the season and the hop.
+- **Neoc → Easter → Spring** — connects to the season and the hop.
 - **Easter eggs** — the whole "hidden surprises" brand voice falls out of the name for free.
 - **Memorable & friendly** — easy to say, spell, and build a mascot around.
 
@@ -51,7 +51,7 @@ The name does a remarkable amount of work:
 
 ## Voice & Tone
 
-Bunny is **playful but professional**. We're a serious framework that doesn't take *itself* too seriously.
+Neoc is **playful but professional**. We're a serious framework that doesn't take *itself* too seriously.
 
 | Do | Don't |
 |----|-------|
@@ -100,13 +100,13 @@ An Easter-adjacent palette kept tasteful and modern — fresh, not garish.
 
 ## CLI & Command Vocabulary
 
-Today's commands (see `bunny --help`):
+Today's commands (see `neoc --help`):
 
 | Command | Action |
 |---------|--------|
-| `bunny build` | Compile every matching `.tsb` to sibling `.ts`. |
-| `bunny compile` | Transpile a single `.tsb` file. |
-| `bunny lsp` | Stdio language server (Zed/VS Code extensions). |
+| `neoc build` | Compile every matching `.neoc` to sibling `.ts`. |
+| `neoc compile` | Transpile a single `.neoc` file. |
+| `neoc lsp` | Stdio language server (Zed/VS Code extensions). |
 
 Routes, OpenAPI, fetch clients, CLI commands, and event listeners are emitted as **per-file `export const` records**. Users merge them in their own entry (`server.ts`, `cli.ts`, `run.ts`). No project-level assembler subcommands; no hidden generated wiring files.
 
@@ -131,11 +131,11 @@ Recurring traditions that make the project fun to follow:
 
 | Attribute | Value |
 |-----------|-------|
-| **Name** | Bunny |
+| **Name** | Neoc |
 | **Descriptor** | A Rust-flavoured TypeScript dialect for Bun |
 | **Runtime** | Bun |
-| **Source** | `.tsb` (a TypeScript superset with `struct` / `impl` / `match` / `#[macro]`) |
-| **Output** | Plain `.ts` — zero runtime dependency on bunny |
+| **Source** | `.neoc` (a TypeScript superset with `struct` / `impl` / `match` / `#[macro]`) |
+| **Output** | Plain `.ts` — zero runtime dependency on neoc |
 | **Pillars** | Fast · Spring · Easter Eggs |
 | **Primary tagline** | Spring into TypeScript. |
 | **Mascot** | A rabbit with a spring coil 🐰🌀 |
@@ -144,6 +144,6 @@ Recurring traditions that make the project fun to follow:
 
 <div align="center">
 
-*Bunny — hop in.* 🐰
+*Neoc — hop in.* 🐰
 
 </div>
