@@ -435,7 +435,10 @@ function missingTraitMethodDiagnostics(
     const methods = resolveTraitMethods(part.traitName, doc, workspace);
     if (!methods) continue;
     const implemented = new Set(part.methods.map((m) => m.name));
-    const missing = methods.filter((m) => !implemented.has(m.name));
+    // Methods with a default body aren't "missing" — the trait
+    // already provides them. Only flag required (signature-only)
+    // methods that the impl block hasn't supplied.
+    const missing = methods.filter((m) => !implemented.has(m.name) && !m.hasDefault);
     if (missing.length === 0) continue;
     // Range covers the impl header only — the `impl Trait for X {`
     // line — so the squiggle is anchored to the declaration.
@@ -464,12 +467,8 @@ function missingTraitMethodDiagnostics(
 }
 
 function missingMessage(traitName: string, missing: TraitMethodSig[]): string {
-  const required = missing.filter((m) => !m.hasDefault).map((m) => m.name);
-  const optional = missing.filter((m) => m.hasDefault).map((m) => m.name);
-  const parts: string[] = [];
-  if (required.length > 0) parts.push(`missing required: ${required.join(", ")}`);
-  if (optional.length > 0) parts.push(`available defaults: ${optional.join(", ")}`);
-  return `impl ${traitName} — ${parts.join("; ")}`;
+  const names = missing.map((m) => m.name).join(", ");
+  return `impl ${traitName} — missing required method${missing.length === 1 ? "" : "s"}: ${names}`;
 }
 
 // ----------------------------------------------------------------------------
