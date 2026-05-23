@@ -1,0 +1,53 @@
+/// A point on a 2D plane.
+#[derive(Clone, Equals, ToTable, Display)]
+struct Point {
+  x: number,
+  y: number,
+}
+
+impl Point {
+  translate(self: Point, dx: number, dy: number): Point {
+    return Point.new({ x = self.x + dx, y = self.y + dy })
+  }
+}
+
+/// A product sold in the shop.
+#[derive(Clone, ToTable)]
+struct Product {
+  #[minLength(1)]
+  #[maxLength(200)]
+  name: string,
+  #[minimum(0)]
+  priceCents: number,
+  #[minimum(0)]
+  stock: number,
+}
+
+impl Product {
+  priceLabel(self: Product): string {
+    return string.format("$%.2f", self.priceCents / 100)
+  }
+}
+
+/// Error variants for the calculator example.
+struct DivByZero {}
+struct UnknownOp { op: string }
+
+/// Apply a binary operation, returning a Result.
+export function apply(a: number, op: string, b: number): Result<number, DivByZero | UnknownOp> {
+  return match op {
+    "+" => Ok(a + b),
+    "-" => Ok(a - b),
+    "*" => Ok(a * b),
+    "/" => (b == 0) and Err(DivByZero.new({})) or Ok(a / b),
+    _ => Err(UnknownOp.new({ op = op })),
+  }
+}
+
+/// Render a calculator error to a human-readable string.
+export function describe(err: DivByZero | UnknownOp): string {
+  return match err {
+    DivByZero => "division by zero",
+    UnknownOp { op } => "unknown operator: " .. op,
+  }
+}

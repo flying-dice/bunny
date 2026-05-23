@@ -1,34 +1,23 @@
 /**
- * Top-level neoc compile. parse → run macros via the emitter → final TS.
+ * Top-level neoc compile. parse → run macros via the emitter → final Lua.
  *
- *   const { ts, diagnostics } = transpile(source);
+ *   const { lua, diagnostics } = await transpile(source);
  */
 import { registerBuiltins } from "./macros/builtins.ts";
-import { emit, type EmitChunk } from "./codegen/typescript/index.ts";
+import { emit, type EmitChunk } from "./codegen/lua/index.ts";
 import { MacroRegistry } from "./macros/registry.ts";
 import * as M from "./ast/index.ts";
 import { parseViaTreeSitter } from "./parser/adapter.ts";
 
 export interface TranspileOptions {
-  /**
-   * Paths to user-authored macro modules to load (absolute or
-   * dynamically importable). Each module's `default` export — a `Macro`
-   * or `Macro[]` — gets registered alongside the built-ins.
-   */
   macroModules?: string[];
-  /**
-   * Absolute path of the source file. Forwarded to macros so they can
-   * resolve sibling resources (e.g. the `#[sql]` macro reads
-   * `./sql/{name}.sql` relative to this path).
-   */
   sourcePath?: string;
 }
 
 export interface TranspileResult {
-  ts: string;
+  lua: string;
   diagnostics: M.ParseDiagnostic[];
   chunks: EmitChunk[];
-  /** True if the compiled output uses Result / Ok / Err / ConstraintError. */
   usesResult: boolean;
 }
 
@@ -42,11 +31,11 @@ export async function transpile(
   for (const path of options.macroModules ?? []) {
     await registry.loadFrom(path);
   }
-  const { ts, diagnostics: emitDiags, chunks, usesResult } = emit(module, registry, {
+  const { lua, diagnostics: emitDiags, chunks, usesResult } = emit(module, registry, {
     sourcePath: options.sourcePath,
   });
   return {
-    ts,
+    lua,
     diagnostics: [...parseDiags, ...emitDiags],
     chunks,
     usesResult,

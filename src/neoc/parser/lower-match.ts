@@ -1,31 +1,21 @@
 /**
- * Lower `match expr { pattern => result, … }` expressions to IIFEs by
- * walking the typed AST (rather than tokenising body text). Each
- * `match_expression` node in a body subtree is rendered as
+ * Lower `match expr { pattern => result, … }` expressions to Lua IIFEs
+ * by walking the typed AST.
  *
- *   ((__m) => {
- *     if (<condition>) return <result>;
- *     …
- *     throw new Error("match: no arm matched");
- *   })(<scrutinee>)
- *
- * The transformation is text-level on the output but driven by AST
- * positions on the input — no regex, no token-walking.
+ *   (function(__m)
+ *     if <condition> then return <result> end
+ *     ...
+ *     error("match: no arm matched")
+ *   end)(<scrutinee>)
  */
 import type * as N from "../ast/nodes.generated.ts";
 
-/**
- * Take a body string + the AST node it came from, return the body
- * with every nested `match_expression` replaced by an IIFE.
- */
 export function lowerBody(node: N.NodeBase, bodyText: string): string {
   const baseOffset = node.startIndex;
-  // Find every match_expression in the subtree rooted at `node`.
-  // Process in REVERSE order so earlier-position splices don't
-  // shift later positions.
   const matches: N.MatchExpressionNode[] = [];
   collectMatches(node as N.AstNode, matches);
   if (matches.length === 0) return bodyText;
+  // Reverse order so earlier-position splices don't shift later ones.
   matches.sort((a, b) => b.startIndex - a.startIndex);
 
   let out = bodyText;
@@ -50,7 +40,6 @@ function collectMatches(
   }
   if (node.kind === "match_expression") {
     out.push(node);
-    // Still walk children to handle nested `match` inside arm bodies.
   }
   for (const key of Object.keys(node)) {
     if (["kind", "startIndex", "endIndex", "startPosition", "endPosition", "text"].includes(key)) continue;
@@ -58,20 +47,26 @@ function collectMatches(
   }
 }
 
-// ---------------------------------------------------------------------------
-// IIFE rendering for a single match_expression node.
-// ---------------------------------------------------------------------------
-
 function renderMatchAsIife(node: N.MatchExpressionNode): string {
   const scrutinee = node.scrutinee.text;
   const arms = (node.children ?? []).filter((c) => c.kind === "match_arm") as N.MatchArmNode[];
 
-  const lines: string[] = ["((__m) => {"];
+  // Lua forbids any statement after `return` in a block. Wildcard /
+  // binding arms render as bare `return ...` and always match, so a
+  // trailing `error("…")` would never run and the parser would reject
+  // it. Skip the fallback when those arms are present.
+  const hasCatchAll = arms.some(
+    (a) => a.pattern.kind === "wildcard_pattern" || a.pattern.kind === "binding_pattern"
+  );
+
+  const lines: string[] = ["(function(__m)"];
   for (const arm of arms) {
     lines.push(renderArm(arm));
   }
-  lines.push(`  throw new Error("match: no arm matched");`);
-  lines.push(`})(${scrutinee})`);
+  if (!hasCatchAll) {
+    lines.push(`  error("match: no arm matched")`);
+  }
+  lines.push(`end)(${scrutinee})`);
   return lines.join("\n");
 }
 
@@ -81,19 +76,19 @@ function renderArm(arm: N.MatchArmNode): string {
 
   switch (pattern.kind) {
     case "wildcard_pattern":
-      return `  return ${result};`;
+      return `  return ${result}`;
 
     case "literal_pattern": {
-      return `  if (__m === ${pattern.text}) return ${result};`;
+      return `  if __m == ${pattern.text} then return ${result} end`;
     }
 
     case "binding_pattern": {
       const name = pattern.text;
-      return `  { const ${name} = __m; return ${result}; }`;
+      return `  do local ${name} = __m; return ${result} end`;
     }
 
     case "object_pattern":
-      return renderObjectArm(pattern, result, /*structName=*/ undefined);
+      return renderObjectArm(pattern, result, undefined);
 
     case "struct_pattern": {
       const structName = pattern.name.text;
@@ -101,14 +96,12 @@ function renderArm(arm: N.MatchArmNode): string {
       if (body) {
         return renderObjectArm(body as N.PatternBodyNode, result, structName);
       }
-      const cond = `typeof __m === "object" && __m !== null && (__m as Record<string, unknown>)._struct === ${JSON.stringify(structName)}`;
-      return `  if (${cond}) return ${result};`;
+      const cond = `type(__m) == "table" and __m._struct == ${luaString(structName)}`;
+      return `  if ${cond} then return ${result} end`;
     }
 
     default:
-      // Shouldn't reach — grammar's pattern union covers the cases.
-      // (`pattern` is `never` here from exhaustiveness.)
-      return `  /* unhandled match pattern */`;
+      return `  -- unhandled match pattern`;
   }
 }
 
@@ -117,9 +110,6 @@ function renderObjectArm(
   result: string,
   structName: string | undefined
 ): string {
-  // `object_pattern` wraps a single `pattern_body` child; struct
-  // patterns already pass the inner pattern_body directly. Normalise
-  // both to the entries list of a pattern_body.
   const inner: N.PatternBodyNode | undefined =
     body.kind === "object_pattern"
       ? (Array.isArray((body as unknown as { children?: unknown }).children)
@@ -130,20 +120,15 @@ function renderObjectArm(
     N.PatternCheckNode | N.PatternBindNode | N.PatternShorthandNode
   >;
 
-  const guards: string[] = [];
+  const guards: string[] = [`type(__m) == "table"`];
   if (structName) {
-    guards.push(
-      `(__m as Record<string, unknown>)._struct === ${JSON.stringify(structName)}`
-    );
+    guards.push(`__m._struct == ${luaString(structName)}`);
   }
   const binds: { binding: string; key: string }[] = [];
   for (const entry of entries) {
     if (entry.kind === "pattern_check") {
-      const valueNode = entry.value;
-      const valueText = valueNode.text;
-      guards.push(
-        `(__m as Record<string, unknown>).${entry.key.text} === ${valueText}`
-      );
+      const valueText = entry.value.text;
+      guards.push(`__m.${entry.key.text} == ${valueText}`);
     } else if (entry.kind === "pattern_bind") {
       binds.push({ binding: entry.binding.text, key: entry.key.text });
     } else if (entry.kind === "pattern_shorthand") {
@@ -152,15 +137,16 @@ function renderObjectArm(
     }
   }
 
-  const cond = guards.length === 0
-    ? `typeof __m === "object" && __m !== null`
-    : `typeof __m === "object" && __m !== null && ${guards.join(" && ")}`;
-
+  const cond = guards.join(" and ");
   if (binds.length === 0) {
-    return `  if (${cond}) return ${result};`;
+    return `  if ${cond} then return ${result} end`;
   }
   const bindings = binds
-    .map((b) => `const ${b.binding} = (__m as any).${b.key};`)
-    .join(" ");
-  return `  if (${cond}) { ${bindings} return ${result}; }`;
+    .map((b) => `local ${b.binding} = __m.${b.key}`)
+    .join("; ");
+  return `  if ${cond} then ${bindings}; return ${result} end`;
+}
+
+function luaString(s: string): string {
+  return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
