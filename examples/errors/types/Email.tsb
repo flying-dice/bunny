@@ -1,0 +1,8 @@
+// A constrained newtype around a string. Bunny emits both a throwing
+// `Email.new(...)` and a Result-returning `Email.tryNew(...)`. The
+// errors example uses `tryNew` so bad input doesn't crash.
+
+struct Email {
+  #[format("email")]
+  value: string,
+}

@@ -16,6 +16,7 @@
     "example:ssr": "cd examples/ssr && bun ../../src/cli.ts build -s '**/*.tsb'",
     "example:cli": "cd examples/cli && bun ../../src/cli.ts build -s '**/*.tsb'",
     "example:sql": "cd examples/sql && bun ../../src/cli.ts build -s '**/*.tsb'",
+    "example:errors": "cd examples/errors && bun ../../src/cli.ts build -s '**/*.tsb'",
     "example:all": "bun run example:api && bun run example:csr && bun run example:ssr && bun run example:cli && bun run example:sql",
     "example:api:serve": "bun examples/api/server.ts",
     "example:csr:serve": "bun --hot examples/csr/server.ts",

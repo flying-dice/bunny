@@ -157,7 +157,7 @@ Same-module struct fields chain automatically (no `#[deep]` needed). Cross-modul
 
 ### `match`
 
-Pattern matching over literals, identifiers, and discriminated unions.
+Pattern matching over literals, identifiers, and object patterns. Object patterns support two kinds of entries: a literal **check** (`kind: "X"` requires the field equals the literal) and a **binding** (`value: v` pulls the field's value into the arm's scope as `v`). Mix them freely.
 
 ```tsb
 type Event =
@@ -166,14 +166,23 @@ type Event =
 
 export function announce(e: Event): string {
   return match e {
-    { kind: "Hello" } => `hi, ${e.who}`,
-    { kind: "Bye" }   => "bye",
-    _                 => "?",
+    { kind: "Hello", who: name } => `hi, ${name}`,
+    { kind: "Bye" }              => "bye",
+    _                            => "?",
+  };
+}
+
+// Match on Result with payload bindings:
+export function describe(r: Result<number, string>): string {
+  return match r {
+    { ok: true, value: v }  => `ok: ${v}`,
+    { ok: false, error: e } => `err: ${e}`,
+    _                       => "?",
   };
 }
 ```
 
-Lowers to an IIFE with `if (…) return …;` chains — no runtime support code needed.
+Lowers to an IIFE with `if (…) return …;` chains — no runtime support code. Arms must be single expressions; multi-statement bodies should be packed into a helper function.
 
 ### Result + `tryNew`
 
@@ -317,6 +326,7 @@ Each example regenerates with `bun run example:<name>` and includes a runnable e
 | [`examples/csr`](./examples/csr/) | api backend in `.tsb`, React frontend imports the per-file `client` const for typed fetch |
 | [`examples/sql`](./examples/sql/) | `#[sql]` against `bun:sqlite` (incl. `RETURNING`); per-file `listeners` + 6-line bus in `run.ts` |
 | [`examples/ssr`](./examples/ssr/) | `.tsb` entities/services with `.tsx` controllers streaming HTML via `renderToReadableStream` |
+| [`examples/errors`](./examples/errors/) | Dedicated Result + `match` demo. Calc command with a tagged-union `CalcError`, register command with deep `tryNew` validation, all dispatch via `match` patterns (binding + checks) |
 
 ## Editor support
 

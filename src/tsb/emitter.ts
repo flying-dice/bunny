@@ -152,7 +152,11 @@ export function emit(
   for (const part of module.parts) {
     switch (part.kind) {
       case "opaque":
-        push(part.text, part.span.start);
+        // Match is a language feature, not an attribute-driven
+        // transform — lower it inside arbitrary user code (free
+        // functions, top-level statements) as well as in
+        // bunny-parsed declarations.
+        push(lowerMatchExpressions(part.text), part.span.start);
         break;
       case "struct": {
         push(emitStruct(part), part.span.start);

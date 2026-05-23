@@ -137,7 +137,19 @@ type Pattern =
   | { kind: "literal"; text: string }
   | { kind: "wildcard" }
   | { kind: "identifier"; name: string }
-  | { kind: "discriminant"; discriminant: string };
+  /**
+   * Object pattern. Each entry is either a *check* (the field must
+   * equal a primitive literal) or a *binding* (the field's value gets
+   * bound to a new identifier for the arm body). Both forms compose:
+   *
+   *   { kind: "Hello", who: name } → check kind, bind who as `name`
+   *   { ok: true, value: v }       → check ok, bind value as `v`
+   */
+  | { kind: "object"; entries: ObjectPatternEntry[] };
+
+type ObjectPatternEntry =
+  | { type: "check"; key: string; valueText: string }
+  | { type: "bind"; key: string; binding: string };
 
 function parseArms(tokens: readonly Token[], from: number, to: number): Arm[] | undefined {
   const arms: Arm[] = [];
@@ -202,10 +214,28 @@ function parsePattern(
     return { kind: "literal", text: trimmed };
   }
   if (trimmed.startsWith("{")) {
-    // Discriminant: look for `kind: "<value>"` inside the object literal.
-    const m = trimmed.match(/kind\s*:\s*(['"])([^'"]+)\1/);
-    if (m) return { kind: "discriminant", discriminant: m[2]! };
-    return undefined;
+    // Parse one or more `<key>: <literal-or-ident>` entries. A literal
+    // value is a runtime check; an identifier is a binding that pulls
+    // the field value into the arm's scope.
+    const inner = trimmed.slice(1, -1).trim();
+    if (inner.length === 0) return { kind: "object", entries: [] };
+    const entries: ObjectPatternEntry[] = [];
+    for (const part of splitTopLevelCommas(inner)) {
+      const literalMatch = part.match(
+        /^\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*:\s*(true|false|null|undefined|-?\d+(?:\.\d+)?|"[^"]*"|'[^']*')\s*$/
+      );
+      if (literalMatch) {
+        entries.push({ type: "check", key: literalMatch[1]!, valueText: literalMatch[2]! });
+        continue;
+      }
+      const bindMatch = part.match(/^\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*:\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*$/);
+      if (bindMatch) {
+        entries.push({ type: "bind", key: bindMatch[1]!, binding: bindMatch[2]! });
+        continue;
+      }
+      return undefined;
+    }
+    return { kind: "object", entries };
   }
   // Bare identifier — used as a binding for the whole scrutinee.
   if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(trimmed)) {
@@ -228,13 +258,29 @@ function renderLowered(scrutinee: string, arms: readonly Arm[]): string {
         lines.push(`  { const ${arm.pattern.name} = __m; return ${arm.resultText}; }`);
         break;
       }
-      case "discriminant":
-        lines.push(
-          `  if (typeof __m === "object" && __m !== null && (__m as { kind: string }).kind === ${JSON.stringify(
-            arm.pattern.discriminant
-          )}) return ${arm.resultText};`
+      case "object": {
+        const checks = arm.pattern.entries.filter((e) => e.type === "check");
+        const binds = arm.pattern.entries.filter((e) => e.type === "bind");
+        const guards = checks.map(
+          (c) => `(__m as Record<string, unknown>).${c.key} === ${c.valueText}`
         );
+        const cond =
+          guards.length === 0
+            ? `typeof __m === "object" && __m !== null`
+            : `typeof __m === "object" && __m !== null && ${guards.join(" && ")}`;
+        if (binds.length === 0) {
+          lines.push(`  if (${cond}) return ${arm.resultText};`);
+        } else {
+          // Pull each bound key off the scrutinee. We use `as any` here
+          // because match doesn't know the static type of `__m` — the
+          // caller's typed scrutinee is what makes the arm safe.
+          const bindings = binds
+            .map((b) => `const ${b.binding} = (__m as any).${b.key};`)
+            .join(" ");
+          lines.push(`  if (${cond}) { ${bindings} return ${arm.resultText}; }`);
+        }
         break;
+      }
     }
   }
   lines.push(`  throw new Error("match: no arm matched");`);
@@ -253,6 +299,24 @@ function isTrivia(t: Token): boolean {
 function joinTexts(tokens: readonly Token[], from: number, to: number): string {
   let out = "";
   for (let i = from; i < to; i++) out += tokens[i]!.text;
+  return out;
+}
+
+/** Split a string on top-level commas (depth-aware over (), [], {}). */
+function splitTopLevelCommas(s: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let last = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]!;
+    if (c === "(" || c === "[" || c === "{") depth++;
+    else if (c === ")" || c === "]" || c === "}") depth--;
+    else if (c === "," && depth === 0) {
+      out.push(s.slice(last, i));
+      last = i + 1;
+    }
+  }
+  if (last <= s.length) out.push(s.slice(last));
   return out;
 }
 

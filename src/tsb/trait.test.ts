@@ -1,6 +1,49 @@
 import { expect, test } from "bun:test";
 import { transpile } from "./transpile.ts";
 
+test("match binds object-pattern fields into the arm scope", async () => {
+  const { ts } = await transpile(`
+    type R = { ok: true; value: number } | { ok: false; error: string };
+    export function f(r: R): string {
+      return match r {
+        { ok: true, value: v } => \`ok: \${v}\`,
+        { ok: false, error: e } => \`err: \${e}\`,
+        _ => "?",
+      };
+    }
+  `);
+  expect(ts).toContain("const v = (__m as any).value");
+  expect(ts).toContain("const e = (__m as any).error");
+  expect(ts).toContain("(__m as Record<string, unknown>).ok === true");
+});
+
+test("match supports boolean discriminants and binding side-by-side", async () => {
+  const { ts } = await transpile(`
+    export function f(r: { ok: true } | { ok: false }): boolean {
+      return match r {
+        { ok: true } => true,
+        { ok: false } => false,
+      };
+    }
+  `);
+  expect(ts).toContain("(__m as Record<string, unknown>).ok === true");
+  expect(ts).toContain("(__m as Record<string, unknown>).ok === false");
+});
+
+test("match expressions in opaque (non-attribute) functions get lowered", async () => {
+  const { ts } = await transpile(`
+    export function classify(n: number): string {
+      return match n {
+        0 => "zero",
+        _ => "other",
+      };
+    }
+  `);
+  // The IIFE structure indicates lowering happened.
+  expect(ts).toContain("((__m) => {");
+  expect(ts).toContain('if (__m === 0) return "zero"');
+});
+
 test("trait declaration emits a generic TS interface", async () => {
   const { ts } = await transpile(`
     trait Display {

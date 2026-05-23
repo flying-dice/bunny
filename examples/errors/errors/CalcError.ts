@@ -1,0 +1,9 @@
+// A discriminated union — the conventional way to model "this operation
+// can fail in N typed ways" without throwing. Each variant carries the
+// data the caller needs to render a clean error message.
+
+export type CalcError =
+  | { kind: "BadNumber"; input: string }
+  | { kind: "UnknownOp"; op: string }
+  | { kind: "DivByZero" };
+//# sourceMappingURL=CalcError.ts.map
