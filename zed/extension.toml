@@ -1,7 +1,7 @@
 id = "tsb"
 name = "tsb"
 description = "TypeScript with Rust-flavoured sugar — language support."
-version = "0.2.0"
+version = "0.3.0"
 schema_version = 1
 authors = ["Jonathan Turnock"]
 repository = "https://github.com/flying-dice/bun-oas"
@@ -10,10 +10,15 @@ repository = "https://github.com/flying-dice/bun-oas"
 name = "tsb"
 languages = ["tsb"]
 
-# Ship the TypeScript tree-sitter grammar under a tsb-scoped name so
-# it can't collide with Zed's built-in `typescript` grammar (which
-# previously broke TS highlighting editor-wide).
-[grammars.tsb]
-repository = "https://github.com/tree-sitter/tree-sitter-typescript"
-commit = "d847898fec3fe596798c9fda55cb8c05a799001a"
-path = "typescript"
+# No grammar declaration. Two attempts didn't work:
+#   v0.1.0 declared `[grammars.typescript]` — collided with Zed's
+#   built-in TS grammar and broke `.ts` highlighting editor-wide.
+#   v0.2.0 renamed it to `[grammars.tsb]` — but the tree-sitter
+#   compiler expects the parser's exported symbol (`tree_sitter_<name>`)
+#   to match. The tree-sitter-typescript source exports
+#   `tree_sitter_typescript`, so the rename produces a compile error.
+#
+# Until tsb has its own tree-sitter grammar (or a renamed fork of
+# tree-sitter-typescript), .tsb files render as plain text in the
+# editor. The LSP still provides diagnostics, completion, hover, and
+# goto-definition.
