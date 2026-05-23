@@ -18,6 +18,8 @@
  * a useful surface without that dependency.
  */
 
+import { readFileSync } from "node:fs";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { parse } from "./parser/index.ts";
 import * as M from "./ast/index.ts";
 import { transpile } from "./compiler.ts";
@@ -51,16 +53,48 @@ interface DocState {
   module?: M.Module;
 }
 
+/**
+ * Symbol harvested from another .tsb file in the workspace. Powers
+ * cross-file completion / hover / goto — when the user types
+ * `(product: Pr` in `controllers/X.tsb`, the `Product` struct
+ * declared in `entities/Product.tsb` shows up.
+ */
+interface WorkspaceSymbol {
+  name: string;
+  kind: "struct" | "trait" | "function" | "impl";
+  uri: string;
+  /** Range of the declaration in its source file. */
+  range: Range;
+  /** Short detail line for the completion item / hover. */
+  detail: string;
+}
+
 /** Run the LSP. Resolves when the client closes stdin. */
 export async function runLsp(): Promise<void> {
   const docs = new Map<string, DocState>();
+  const workspaceSymbols = new Map<string, WorkspaceSymbol>();
+  const workspaceRoots: string[] = [];
 
   await readMessages(async (msg) => {
     if (msg.method === "initialize") {
+      // Capture workspace roots from the initialize params for the
+      // background symbol scan that fires on `initialized`.
+      const params = (msg.params ?? {}) as {
+        workspaceFolders?: { uri: string }[];
+        rootUri?: string;
+      };
+      const folders = params.workspaceFolders ?? (params.rootUri ? [{ uri: params.rootUri }] : []);
+      for (const f of folders) {
+        try {
+          workspaceRoots.push(fileURLToPath(f.uri));
+        } catch {
+          /* malformed uri — ignore */
+        }
+      }
       respond(msg.id!, {
         capabilities: {
           textDocumentSync: { openClose: true, change: 1 /* Full */ },
-          completionProvider: { triggerCharacters: ["#", "[", "(", "@"] },
+          completionProvider: { triggerCharacters: ["#", "[", "(", "@", ":", " "] },
           hoverProvider: true,
           definitionProvider: true,
         },
@@ -68,7 +102,11 @@ export async function runLsp(): Promise<void> {
       });
       return;
     }
-    if (msg.method === "initialized") return;
+    if (msg.method === "initialized") {
+      // Background scan — don't block the LSP startup handshake.
+      void rebuildWorkspaceSymbols(workspaceRoots, workspaceSymbols);
+      return;
+    }
     if (msg.method === "shutdown") { respond(msg.id!, null); return; }
     if (msg.method === "exit") process.exit(0);
 
@@ -82,6 +120,9 @@ export async function runLsp(): Promise<void> {
       const p = msg.params as { textDocument: { uri: string }; contentChanges: { text: string }[] };
       const text = p.contentChanges[0]?.text ?? "";
       await setDoc(docs, p.textDocument.uri, text);
+      // Refresh the workspace entry for this file so newly-declared
+      // structs / functions show up in other open documents' completions.
+      updateWorkspaceSymbolsForFile(p.textDocument.uri, text, workspaceSymbols);
       await publishDiagnostics(p.textDocument.uri, text);
       return;
     }
@@ -95,19 +136,19 @@ export async function runLsp(): Promise<void> {
     if (msg.method === "textDocument/completion") {
       const p = msg.params as { textDocument: { uri: string }; position: Position };
       const doc = docs.get(p.textDocument.uri);
-      respond(msg.id!, doc ? completionsAt(doc, p.position) : { isIncomplete: false, items: [] });
+      respond(msg.id!, doc ? completionsAt(doc, p.position, workspaceSymbols) : { isIncomplete: false, items: [] });
       return;
     }
     if (msg.method === "textDocument/hover") {
       const p = msg.params as { textDocument: { uri: string }; position: Position };
       const doc = docs.get(p.textDocument.uri);
-      respond(msg.id!, doc ? hoverAt(doc, p.position) : null);
+      respond(msg.id!, doc ? hoverAt(doc, p.position, workspaceSymbols) : null);
       return;
     }
     if (msg.method === "textDocument/definition") {
       const p = msg.params as { textDocument: { uri: string }; position: Position };
       const doc = docs.get(p.textDocument.uri);
-      respond(msg.id!, doc ? definitionAt(doc, p.position, p.textDocument.uri) : null);
+      respond(msg.id!, doc ? definitionAt(doc, p.position, p.textDocument.uri, workspaceSymbols) : null);
       return;
     }
 
@@ -127,6 +168,84 @@ async function setDoc(docs: Map<string, DocState>, uri: string, text: string): P
     module = undefined;
   }
   docs.set(uri, { text, module });
+}
+
+/**
+ * Walk every workspace root, find every `.tsb` file, parse it, and
+ * load its top-level declarations into the workspace symbol table.
+ * Runs once on `initialized` and is incrementally updated on every
+ * `didChange` by `updateWorkspaceSymbolsForFile`.
+ */
+async function rebuildWorkspaceSymbols(
+  roots: readonly string[],
+  out: Map<string, WorkspaceSymbol>,
+): Promise<void> {
+  out.clear();
+  for (const root of roots) {
+    const glob = new Bun.Glob("**/*.tsb");
+    for await (const rel of glob.scan({ cwd: root, onlyFiles: true })) {
+      const abs = `${root}/${rel}`;
+      let text: string;
+      try {
+        text = readFileSync(abs, "utf-8");
+      } catch {
+        continue;
+      }
+      const uri = pathToFileURL(abs).href;
+      await harvestSymbols(uri, text, out);
+    }
+  }
+}
+
+async function updateWorkspaceSymbolsForFile(
+  uri: string,
+  text: string,
+  out: Map<string, WorkspaceSymbol>,
+): Promise<void> {
+  // Drop any symbols previously sourced from this file before
+  // re-harvesting — handles renames / deletions of declarations.
+  for (const [k, sym] of out) {
+    if (sym.uri === uri) out.delete(k);
+  }
+  await harvestSymbols(uri, text, out);
+}
+
+async function harvestSymbols(
+  uri: string,
+  text: string,
+  out: Map<string, WorkspaceSymbol>,
+): Promise<void> {
+  let module: M.Module | undefined;
+  try {
+    module = (await parse(text)).module;
+  } catch {
+    return;
+  }
+  for (const part of module.parts) {
+    if (part.kind === "opaque") continue;
+    const range = offsetsToRange(text, part.span.start, part.span.end);
+    const key = `${part.kind}:${part.name}`;
+    let detail = "";
+    if (part.kind === "struct") {
+      const f = part.fields.map((x) => `${x.name}: ${x.type}`).join(", ");
+      detail = `struct ${part.name} { ${f} }`;
+    } else if (part.kind === "trait") {
+      detail = `trait ${part.name}`;
+    } else if (part.kind === "function") {
+      detail = `fn ${part.name}${part.signature}`;
+    } else if (part.kind === "impl") {
+      detail = part.traitName
+        ? `impl ${part.traitName} for ${part.name}`
+        : `impl ${part.name}`;
+    }
+    out.set(key, {
+      name: part.name,
+      kind: part.kind,
+      uri,
+      range,
+      detail,
+    });
+  }
 }
 
 async function publishDiagnostics(uri: string, text: string): Promise<void> {
@@ -162,7 +281,11 @@ const ROUTE_MACROS = ["get", "post", "put", "patch", "delete", "head", "options"
 
 interface CompletionItem { label: string; kind: number; detail?: string; insertText?: string }
 
-function completionsAt(doc: DocState, pos: Position): { isIncomplete: false; items: CompletionItem[] } {
+function completionsAt(
+  doc: DocState,
+  pos: Position,
+  workspace: ReadonlyMap<string, WorkspaceSymbol>,
+): { isIncomplete: false; items: CompletionItem[] } {
   const offset = positionToOffset(doc.text, pos);
   const before = doc.text.slice(0, offset);
   const items: CompletionItem[] = [];
@@ -181,23 +304,79 @@ function completionsAt(doc: DocState, pos: Position): { isIncomplete: false; ite
     return { isIncomplete: false, items };
   }
 
-  // After `impl … for `: suggest struct names from the current module.
-  if (/\bimpl\b[^{]*\bfor\s+\w*$/.test(before) && doc.module) {
-    for (const p of doc.module.parts) {
-      if (p.kind === "struct") items.push({ label: p.name, kind: 22 /* Struct */ });
-    }
+  // Type position — after `:` in a parameter / return / field / `as`
+  // annotation. Suggest types only (structs + traits from the
+  // current file AND the workspace).
+  if (/:\s*\w*$/.test(before) || /\bas\s+\w*$/.test(before) || /\bimpl\b[^{]*\bfor\s+\w*$/.test(before)) {
+    addTypeCompletions(doc, workspace, items);
     return { isIncomplete: false, items };
   }
 
-  // General context: keywords + visible struct/function names.
+  // General context: keywords + every visible name (workspace +
+  // local). Cross-file struct/trait/function names show up here so
+  // call sites can autocomplete.
   for (const k of KEYWORDS) items.push({ label: k, kind: 14 /* Keyword */ });
+  for (const sym of workspace.values()) {
+    items.push({ label: sym.name, kind: kindFor(sym.kind), detail: sym.detail });
+  }
   if (doc.module) {
     for (const p of doc.module.parts) {
-      if (p.kind === "struct") items.push({ label: p.name, kind: 22 });
-      else if (p.kind === "function") items.push({ label: p.name, kind: 3 });
+      if (p.kind === "opaque") continue;
+      // Local symbols can shadow workspace entries with the same name
+      // — dedupe by removing the workspace entry that matches.
+      const idx = items.findIndex((i) => i.label === p.name && (i.kind === 22 || i.kind === 3));
+      if (idx >= 0) items.splice(idx, 1);
+      const detail = describePart(p);
+      items.push({ label: p.name, kind: kindFor(p.kind), detail });
     }
   }
   return { isIncomplete: false, items };
+}
+
+function addTypeCompletions(
+  doc: DocState,
+  workspace: ReadonlyMap<string, WorkspaceSymbol>,
+  items: CompletionItem[],
+): void {
+  for (const t of ["string", "number", "boolean", "void", "any", "unknown", "never"]) {
+    items.push({ label: t, kind: 14, detail: "primitive type" });
+  }
+  for (const sym of workspace.values()) {
+    if (sym.kind === "struct" || sym.kind === "trait") {
+      items.push({ label: sym.name, kind: 22 /* Struct */, detail: sym.detail });
+    }
+  }
+  if (doc.module) {
+    for (const p of doc.module.parts) {
+      if (p.kind === "struct" || p.kind === "trait") {
+        const idx = items.findIndex((i) => i.label === p.name);
+        if (idx >= 0) items.splice(idx, 1);
+        items.push({ label: p.name, kind: 22, detail: describePart(p) });
+      }
+    }
+  }
+}
+
+function kindFor(symKind: "struct" | "trait" | "function" | "impl"): number {
+  switch (symKind) {
+    case "struct": return 22 /* Struct */;
+    case "trait": return 8 /* Interface */;
+    case "function": return 3 /* Function */;
+    case "impl": return 22;
+  }
+}
+
+function describePart(p: M.ModulePart): string {
+  if (p.kind === "struct") {
+    const f = p.fields.map((x) => `${x.name}: ${x.type}`).join(", ");
+    return `struct ${p.name} { ${f} }`;
+  }
+  if (p.kind === "trait") return `trait ${p.name}`;
+  if (p.kind === "function") return `fn ${p.name}${p.signature}`;
+  if (p.kind === "impl") {
+    return p.traitName ? `impl ${p.traitName} for ${p.name}` : `impl ${p.name}`;
+  }
+  return "";
 }
 
 // ----------------------------------------------------------------------------
@@ -229,28 +408,35 @@ const MACRO_DOCS: Record<string, string> = {
   Hash: "Derive: emits `hash(self) -> string` using a stable JSON-FNV mix.",
 };
 
-function hoverAt(doc: DocState, pos: Position): Hover | null {
+function hoverAt(
+  doc: DocState,
+  pos: Position,
+  workspace: ReadonlyMap<string, WorkspaceSymbol>,
+): Hover | null {
   const word = wordAt(doc.text, pos);
   if (!word) return null;
   const md = MACRO_DOCS[word.text];
   if (md) {
     return { contents: { kind: "markdown", value: `**${word.text}** — ${md}` }, range: word.range };
   }
+  // Local declarations win over workspace entries.
   if (doc.module) {
     for (const p of doc.module.parts) {
-      if (p.kind === "struct" && p.name === word.text) {
-        const fields = p.fields.map((f) => `${f.name}: ${f.type}`).join(", ");
+      if (p.kind === "opaque") continue;
+      if (p.name === word.text) {
         return {
-          contents: { kind: "markdown", value: `**struct ${p.name}** { ${fields} }` },
+          contents: { kind: "markdown", value: `**${describePart(p)}**` },
           range: word.range,
         };
       }
-      if (p.kind === "function" && p.name === word.text) {
-        return {
-          contents: { kind: "markdown", value: `**fn ${p.name}**${p.signature}` },
-          range: word.range,
-        };
-      }
+    }
+  }
+  for (const sym of workspace.values()) {
+    if (sym.name === word.text) {
+      return {
+        contents: { kind: "markdown", value: `**${sym.detail}**` },
+        range: word.range,
+      };
     }
   }
   return null;
@@ -262,15 +448,27 @@ function hoverAt(doc: DocState, pos: Position): Hover | null {
 
 interface Location { uri: string; range: Range }
 
-function definitionAt(doc: DocState, pos: Position, uri: string): Location | null {
+function definitionAt(
+  doc: DocState,
+  pos: Position,
+  uri: string,
+  workspace: ReadonlyMap<string, WorkspaceSymbol>,
+): Location | null {
   const word = wordAt(doc.text, pos);
-  if (!word || !doc.module) return null;
-  for (const p of doc.module.parts) {
-    if ((p.kind === "struct" || p.kind === "function") && p.name === word.text) {
-      return { uri, range: offsetsToRange(doc.text, p.span.start, p.span.end) };
+  if (!word) return null;
+  // Same-file first — keeps `goto definition` snappy when the user
+  // is already on the declaring file.
+  if (doc.module) {
+    for (const p of doc.module.parts) {
+      if (p.kind === "opaque") continue;
+      if (p.name === word.text && !(p.kind === "impl" && p.traitName)) {
+        return { uri, range: offsetsToRange(doc.text, p.span.start, p.span.end) };
+      }
     }
-    if (p.kind === "impl" && p.name === word.text && !p.traitName) {
-      return { uri, range: offsetsToRange(doc.text, p.span.start, p.span.end) };
+  }
+  for (const sym of workspace.values()) {
+    if (sym.name === word.text) {
+      return { uri: sym.uri, range: sym.range };
     }
   }
   return null;

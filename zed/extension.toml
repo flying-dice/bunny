@@ -19,5 +19,5 @@ languages = ["tsb"]
 # (initialised by `setup-grammar.sh`).
 [grammars.tsb]
 repository = "file:///Users/jonathanturnock/Projects/bun-oas/zed/tree-sitter-tsb"
-commit = "8780be418195f9e72157cb63e2ab89540c4850e7"
+commit = "980a450f94a2917b023a9036f86a88fd8ac971a3"
 path = ""
