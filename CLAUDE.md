@@ -1,8 +1,8 @@
 # CLAUDE.md
 
-Guidance for Claude (and any LLM agent) working in the **Neoc** repo.
+Guidance for Claude (and any LLM agent) working in the **neoc-compiler** repo.
 
-> 🐰 Neoc — a Rust-flavoured TypeScript dialect for Bun. `.neoc` → plain `.ts`.
+> neoc-compiler — a Rust-flavoured Lua dialect. `.neoc` → plain `.lua`. The compiler ships as `@flying-dice/neoc-compiler`; the language is `neoc`; the CLI is `neoc`; the matching runtime is the separate `neoc` project (Rust + mlua).
 
 ---
 
@@ -75,14 +75,9 @@ Prose around a code sample stays terse. The doc comment itself stays complete. K
 
 ---
 
-## Voice Stays Neoc
+## Voice
 
-Terse, but the brand stays warm. Neoc is playful but professional. Keep:
-- Friendly error messages. Help the user, don't scold.
-- Rabbit/spring puns **only when they make something clearer or more memorable**. Puns for their own sake get cut.
-- Easter eggs welcome — hidden in the CLI, docs, and source. Discoverable, never in the way.
-
-Tagline stays clean: **"Spring into TypeScript."**
+Direct. No marketing language. Friendly error messages that help the user, never scold. No rabbit / spring / Bun / Easter motifs — that brand belonged to an earlier life of the project when it targeted TypeScript on Bun. neoc-compiler now targets Lua; the voice is plain.
 
 ---
 
@@ -93,10 +88,11 @@ Use [Conventional Commits](https://www.conventionalcommits.org). Terse, but spec
 Format: `type(scope): description`
 
 ```
-fix(sql): mutations with RETURNING dispatch through .get instead of .run
+fix(codegen): trait defaults emit a clean Lua function signature
 
-Otherwise UPDATE ... RETURNING silently dropped the returned row.
-Adds a test against bun:sqlite.
+Previously inlined the trait's TS-style signature verbatim, producing
+invalid Lua. Now goes through the same paramName extractor inherent
+impl methods use.
 
 Closes #42.
 ```
@@ -133,4 +129,4 @@ PR titles follow the same format — the squash-merge commit inherits them, so t
 
 ---
 
-🐰 *Few words. Full meaning. Hop in.*
+*Few words. Full meaning.*

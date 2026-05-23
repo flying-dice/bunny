@@ -1,356 +1,158 @@
-# Neoc
+# neoc-compiler
 
-> 🐰 A Rust-flavoured TypeScript dialect for Bun. `.neoc` files transpile to plain `.ts` — runtime has zero dependency on `@flying-dice/neoc-compiler`.
+A Rust-flavoured Lua dialect. `.neoc` files compile to plain Lua 5.4.
 
-Neoc adds **`struct`**, **`impl`**, **`match`**, and **`#[macro]` attributes** to TypeScript. The compiler transpiles `.neoc` → `.ts`, and each compiled file exports per-file consts (`routes`, `openapi`, `client`, `commands`, `listeners`) built from the macros in that file. You wire the app yourself by importing and spreading those consts in your `server.ts` / `cli.ts` — no project-wide assemblers, no generated wiring files, no runtime container.
-
-You write `.neoc`; neoc writes `.ts`. After codegen, your app has no runtime dependency on this package.
+neoc adds **`struct`**, **`impl`**, **`trait`**, **`match`**, and **`#[macro]` attributes** to Lua. The compiler emits a single `.lua` file per `.neoc` source. The runtime that consumes the output — [neoc](https://github.com/flying-dice/neoc) — is a separate Rust + mlua project; nothing in this repo depends on it at runtime.
 
 ## Install
 
-```bash
+```
 bun add -d @flying-dice/neoc-compiler
 ```
 
-Requires Bun ≥ 1.3 and TypeScript ≥ 5.
+This package is a TypeScript-authored compiler that targets Lua. It runs on Bun. You only need it as a dev dependency — your runtime has zero dependency on this package after codegen.
 
-## Hello, neoc
-
-`controllers/Products.neoc`:
+## Quick taste
 
 ```neoc
-#[derive(Clone, Equals, ToJson)]
-struct Product {
-  #[format("uuid")]
-  id: string,
-  #[minLength(1), maxLength(200)]
-  name: string,
-  #[minimum(0)]
-  priceCents: number,
+/// A point on a 2D plane.
+#[derive(Clone, Equals, ToTable, Display)]
+struct Point {
+  x: number,
+  y: number,
 }
 
-#[get("/products/:id")]
-export function getProduct(id: string): Product {
-  return Product.new({ id, name: "Widget", priceCents: 250 });
+impl Point {
+  translate(self: Point, dx: number, dy: number): Point {
+    return Point.new({ x = self.x + dx, y = self.y + dy })
+  }
 }
 
-#[post("/products")]
-export function createProduct(body: Product): Product {
-  return Product.new(body);
+struct DivByZero {}
+struct UnknownOp { op: string }
+
+export function apply(a: number, op: string, b: number): Result<number, DivByZero | UnknownOp> {
+  return match op {
+    "+" => Ok(a + b),
+    "-" => Ok(a - b),
+    "*" => Ok(a * b),
+    "/" => (b == 0) and Err(DivByZero.new({})) or Ok(a / b),
+    _ => Err(UnknownOp.new({ op = op })),
+  }
 }
 ```
 
-Compile it:
+Compiles to (excerpt):
 
-```bash
+```lua
+-- neoc Result prelude
+local function Ok(value) return { ok = true, value = value } end
+local function Err(error) return { ok = false, error = error } end
+
+local Point = {}
+Point.__index = Point
+function Point.new(data)
+  data._struct = "Point"
+  setmetatable(data, Point)
+  return data
+end
+
+function Point.translate(self, dx, dy)
+  return Point.new({ x = self.x + dx, y = self.y + dy })
+end
+function Point.clone(self) ... end
+function Point.equals(a, b) ... end
+function Point.toTable(self) ... end
+function Point.display(self) ... end
+
+function apply(a, op, b)
+  return (function(__m)
+    if __m == "+" then return Ok(a + b) end
+    if __m == "-" then return Ok(a - b) end
+    if __m == "*" then return Ok(a * b) end
+    if __m == "/" then return (b == 0) and Err(DivByZero.new({})) or Ok(a / b) end
+    return Err(UnknownOp.new({ op = op }))
+  end)(op)
+end
+```
+
+Runs unchanged through `luau` or stock Lua 5.4.
+
+## Build
+
+```
 neoc build -s '**/*.neoc'
 ```
 
-`controllers/Products.ts` is plain TypeScript: a `type Product`, a `const Product` with `new` / `clone` / `equals` / `toJson` methods, the two route functions, and three per-file consts:
-
-- `export const routes` — `{ "/products/:id": { GET: (req) => … }, "/products": { POST: async (req) => … } }`
-- `export const openapi` — the OpenAPI fragment for those paths
-- `export const client` — typed fetch wrappers: `getProduct(id) → Promise<Product>` etc.
-
-Then in `server.ts` (you write this once):
-
-```ts
-import {
-  openapi as productsSpec,
-  routes as productsRoutes,
-} from "./controllers/Products.ts";
-
-Bun.serve({
-  port: 3000,
-  routes: { ...productsRoutes },
-});
-
-await Bun.write(
-  "openapi.json",
-  JSON.stringify({
-    openapi: "3.1.0",
-    info: { title: "Products API", version: "0.1.0" },
-    paths: { ...productsSpec },
-  }, null, 2),
-);
-```
-
-For more controllers, add more imports + more `...spreads`. No assembler step, no hidden generated files — the app's surface is whatever you spread.
-
-## Commands
-
-```
-neoc build    -s <glob>... [-w]      Compile every matching .neoc to sibling .ts.
-neoc compile  <file.neoc> [-o out.ts] Transpile one file.
-neoc lsp                             Stdio language server (used by editors).
-```
-
-`--source` / `-s` is repeatable; `--macro` loads user-authored macro modules; `--watch` re-runs `build` on change.
-
-## Language features
-
-### `struct` and `impl`
-
-`struct` declares a data shape; `impl` declares its methods and factory. Each struct emits both a `type` alias *and* a `const` carrying its `new(data)` factory and any derived methods.
-
-```neoc
-struct Money {
-  amount: number,
-  currency: string,
-}
-
-impl Money {
-  new(data: Money): Money { return data; }
-  add(self: Money, other: Money): Money {
-    if (self.currency !== other.currency) throw new Error("currency mismatch");
-    return { amount: self.amount + other.amount, currency: self.currency };
-  }
-}
-```
-
-Methods take `self` as their first parameter (no `this`). Call them via the const: `Money.add(a, b)`.
-
-If you write a `struct` with no `impl`, neoc synthesises a minimal one whenever the struct has derives, trait impls, or field constraints, so `Foo.new(data)` always exists.
-
-### Field constraints
-
-Validation guards inject into the synthesised or explicit `new(data)`. They throw on the first failing field.
-
-```neoc
-struct Email {
-  #[format("email")]
-  value: string,
-}
-
-struct User {
-  #[deep]
-  email: Email,
-  #[minLength(1), maxLength(120)]
-  name: string,
-}
-```
-
-| Attribute | Applies to | Generated check |
-| --- | --- | --- |
-| `#[minLength(n)]` | string | `value.length >= n` |
-| `#[maxLength(n)]` | string | `value.length <= n` |
-| `#[pattern("re")]` | string | `/re/.test(value)` |
-| `#[format("uuid"\|"email"\|"date-time"\|"date"\|"time"\|"ipv4")]` | string | Inline regex |
-| `#[minimum(n)]` / `#[maximum(n)]` | number | `value >= n` / `value <= n` |
-| `#[deep]` | struct field whose type is another struct | Chain through `Type.new(data.field)` |
-
-Same-module struct fields chain automatically (no `#[deep]` needed). Cross-module struct fields opt in with `#[deep]` *and* must be imported as a value (not `import type`).
-
-### Derives
-
-`#[derive(Trait)]` on a struct appends methods to its impl.
-
-| Derive | Generated method(s) |
-| --- | --- |
-| `Clone` | `clone(self): Self` |
-| `Equals` | `equals(a, b): boolean` |
-| `ToJson` | `toJson(self): string` and `fromJson(s: string): Self` (validates via `new`) |
-| `Display` | `toString(self): string` |
-| `Default` | `default(): Self` using zero-values or `#[default(...)]` per field |
-| `Hash` | `hash(self): string` (stable FNV-1a over the JSON form) |
-| `Event` | side-effect only: emits an `__event_<Name>` descriptor the events assembler harvests |
-
-### `match` + struct unions
-
-Every struct's type carries a hidden `readonly _struct?: "<Name>"` brand that `<Name>.new(...)` and `<Name>.tryNew(...)` populate. Match patterns dispatch on the brand by **struct name** — no hand-written `kind` discriminator. The natural way to model "one of N errors" or any sum type:
-
-```neoc
-struct BadNumber { input: string }
-struct UnknownOp { op: string }
-struct DivByZero {}
-
-type CalcError = BadNumber | UnknownOp | DivByZero;
-
-function parse(s: string): Result<number, CalcError> {
-  const n = Number(s);
-  if (Number.isNaN(n)) return Err(BadNumber.new({ input: s }));
-  return Ok(n);
-}
-
-function describe(err: CalcError): string {
-  return match err {
-    BadNumber { input } => `not a number: ${input}`,
-    UnknownOp { op }    => `unknown operator: ${op}`,
-    DivByZero           => "cannot divide by zero",
-  };
-}
-```
-
-Other pattern forms still work:
-
-- **Literal patterns** for primitives — `"+" => …`, `0 => …`.
-- **Identifier binding** — `x => …` binds the whole scrutinee (camelCase identifiers only; PascalCase is reserved for struct patterns).
-- **Wildcard** — `_ => …`.
-- **Object patterns** for plain discriminated unions and Result — `{ ok: true, value } => …`, `{ ok: false, error: e } => …`. Each entry is a **check** (`key: <literal>`), a **binding** (`key: <ident>`), or a **shorthand binding** (`{ value }` ≡ `{ value: value }`).
-
-Lowers to an IIFE with `if (…) return …;` chains — no runtime support code. Arms must be single expressions; multi-statement bodies should be packed into a helper function.
-
-**Trade-off:** the brand is visible in `JSON.stringify` output. If you don't want it on the wire, either strip it explicitly before sending (`const { _struct: _, ...clean } = value;`) or use the `ToJson` derive (which the next slice will teach to strip the brand).
-
-### Result + `tryNew`
-
-Every struct with constraints (or whose nested fields have constraints) emits **two** factory methods side-by-side:
-
-- `Foo.new(data): Foo` — throws on the first violation. Backwards-compatible, useful when failure is genuinely exceptional.
-- `Foo.tryNew(data): Result<Foo, ConstraintError>` — returns `Err({ field, message })` on the first violation. Pattern-match the Result instead of wrapping in try/catch.
-
-```neoc
-struct AddBookDto {
-  #[deep]
-  isbn: Isbn,
-  #[minLength(1), maxLength(200)]
-  title: string,
-}
-
-#[command("add", "Add a book")]
-export function addBook(rawIsbn: string, title: string): void {
-  const parsed = AddBookDto.tryNew({ isbn: { value: rawIsbn }, title });
-  if (!parsed.ok) {
-    console.error(`${parsed.error.field}: ${parsed.error.message}`);
-    process.exit(2);
-  }
-  // parsed.value is the validated AddBookDto.
-}
-```
-
-`tryNew` chains: a deep-validated field calls the inner struct's `tryNew` and propagates the `Err` upward. The error preserves the *innermost* field name + message so the caller sees exactly which constraint failed.
-
-When any compiled `.ts` uses `Result`, neoc writes two shared artefacts at the build root **once per build** (not per file):
-
-- `neoc.d.ts` — ambient `declare global { type Result<T, E>; type ConstraintError; function Ok; function Err; function isOk; function isErr; function unwrap; function unwrapOr; function mapResult; function mapErr; function andThen; }`. The user's tsconfig picks it up automatically; compiled files reference `Result`, `Ok`, `Err` etc. without any explicit import.
-- `neoc.runtime.ts` — installs the matching runtime on `globalThis` (idempotently, so re-imports are no-ops). Each compiled `.ts` that uses `Result` gets a single `import "<rel>/neoc.runtime.ts";` at the top to guarantee the globals exist before the module body runs.
-
-No per-file inline prelude. No runtime dependency on `@flying-dice/neoc-compiler`.
-
-The `?` postfix operator (Rust's early-return shorthand) isn't supported yet — propagate manually with `if (!r.ok) return r;`.
-
-### Traits
-
-Declare a contract once; implement it for many structs. The trait body lists method signatures (required) and default methods with `{}` bodies (inherited unless overridden).
-
-```neoc
-trait Display {
-  display(self: Self): string;
-  priceLabel(self: Self): string {
-    return `${Self.display(self)} — see priceCents`;
-  }
-}
-
-impl Display for Product {
-  display(self: Product): string { return self.name; }
-  // priceLabel inherits the default — `Self` is substituted with Product.
-}
-```
-
-The compiler emits a generic `interface Display<Self>` and a const-to-const assignment (`const __Product_satisfies_0: Display<Product> = Product;`) so missing or mistyped trait methods surface as TS errors. Default methods are inlined onto each impl's `const` with `Self` rewritten to the concrete type — there's no runtime trait table or dynamic dispatch.
-
-Limits: same-module trait lookup only (cross-module impls work but don't fill defaults), no trait bounds in generics yet, no `dyn Trait`.
-
-### From / Into
-
-```neoc
-struct ProductId { value: string }
-
-impl From<string> for ProductId {
-  from(value: string): ProductId { return { value }; }
-}
-
-impl From<number> for ProductId {
-  from(value: number): ProductId { return { value: `n-${value}` }; }
-}
-```
-
-Multiple `impl From<T>` blocks naming their method `from` collapse into a single overloaded `ProductId.from(...)` with `typeof` discrimination at runtime. Different method names (`fromString`, `fromBuffer`) keep both as escape hatches.
-
-### Function-attribute macros
-
-Each macro contributes an entry to a per-file `export const` record. The user merges those records across files in their entry point.
-
-| Macro | Contributes to |
-| --- | --- |
-| `#[get/post/put/patch/delete/head/options("/path")]` | `routes` (Bun.serve table), `openapi` (3.1 path operation), `client` (typed fetch wrapper) |
-| `#[command("name", "description?")]` | `commands` (`{ name: { description, params, handler } }`) |
-| `#[derive(Event)]` (on a struct) | `events` (marker record naming the payload type) |
-| `#[onEvent("EventName")]` | `listeners` (`{ EventName: [handler, …] }`) |
-| `#[sql("query-name")]` | replaces the function body with a prepared-statement call against the `db` param |
-
-```neoc
-#[get("/products/:id")]
-export function getProduct(id: string): Product { … }
-
-#[post("/products")]
-export function createProduct(body: CreateProductDto): Product { … }
-
-#[command("add", "Add a book")]
-export function addBook(isbn: string, title: string): void { … }
-
-#[sql("get-book-by-id")]
-export function getBookById(db: Database, id: string): Book | undefined {}
-
-#[onEvent("BookAdded")]
-export async function logBookAdded(event: BookAdded): Promise<void> { … }
-```
-
-`#[sql]` reads `sql/<name>.sql` from the nearest `sql/` directory up the tree, rewrites `:name` placeholders to positional `?`, and chooses `.get/.all/.run` from the SQL kind and the function's return type. `RETURNING` clauses on mutations return the row. The database connection is an explicit first parameter — no DI, no hidden state.
-
-### User macros
-
-A macro module exports an array of macros that neoc loads via `--macro`:
-
-```ts
-// my-macros.ts
-import type { FieldConstraintMacro } from "@flying-dice/neoc-compiler/macro";
-
-const positive: FieldConstraintMacro = {
-  kind: "field-constraint",
-  name: "positive",
-  emit(_ctx, { field }) {
-    return [`if (data.${field.name} <= 0) throw new Error("${field.name} must be > 0");`];
-  },
-};
-
-export default [positive];
-```
-
-```bash
-neoc compile main.neoc --macro ./my-macros.ts
-```
-
-The `@flying-dice/neoc-compiler/macro` import resolves to a type-only module, so the macro file ships with zero runtime dependency on neoc itself.
-
-## Examples
-
-Each example regenerates with `bun run example:<name>` and includes a runnable entrypoint.
-
-| Example | Demonstrates |
-| --- | --- |
-| [`examples/api`](./examples/api/) | structs + derives, `#[get/post]`, per-controller `routes` + `openapi` merged in `server.ts` |
-| [`examples/cli`](./examples/cli/) | `#[command]`, per-file `commands` const + 30-line `cli.ts` dispatcher, `#[deep]` validation chain (Isbn → AddBookDto → Book) |
-| [`examples/csr`](./examples/csr/) | api backend in `.neoc`, React frontend imports the per-file `client` const for typed fetch |
-| [`examples/sql`](./examples/sql/) | `#[sql]` against `bun:sqlite` (incl. `RETURNING`); per-file `listeners` + 6-line bus in `run.ts` |
-| [`examples/ssr`](./examples/ssr/) | `.neoc` entities/services with `.tsx` controllers streaming HTML via `renderToReadableStream` |
-| [`examples/errors`](./examples/errors/) | Dedicated Result + `match` demo. Calc command with a tagged-union `CalcError`, register command with deep `tryNew` validation, all dispatch via `match` patterns (binding + checks) |
+Writes one `.lua` next to each `.neoc`. Use `-w` for watch mode.
 
 ## Editor support
 
-A Zed extension lives at [`zed/`](./zed/). Install it via **zed: install dev extension** in the Zed command palette. It launches `neoc lsp` for diagnostics, completion, hover, and goto-definition. See [`zed/README.md`](./zed/README.md).
+- **Zed** — extension in `zed/`. Run `cd zed && ./setup-grammar.sh && zed --install-dev-extension .` for a local dev install.
+- **WebStorm / IntelliJ** — plugin in `intellij/`. Build with `cd intellij && ./gradlew buildPlugin`, then install the zip from `build/distributions/`.
 
-A VS Code scaffold lives at [`vscode/`](./vscode/) but is unfinished — install Zed for the maintained editor path.
+Both surface highlighting, hover, completion, goto-definition, diagnostics, and a quick-fix that stubs missing trait methods.
 
-## Limits
+## Author macros
 
-Honest caveats:
+The macro registry has three slots:
 
-- The TextMate grammar reuses TypeScript's, so `struct`/`impl`/`match`/`#[…]` aren't highlighted as keywords. The LSP still provides completion and diagnostics.
-- The route adapter binds non-path params from the JSON body on POST/PUT/PATCH and from the query string elsewhere. There's no body-shape inference — the user's function signature is the contract.
-- The macros emit per-file consts; cross-file merging is your responsibility (one line per import + spread). Adding a new controller means adding a new import to `server.ts`. If you'd rather have auto-discovery, write a glob-import in your entry — neoc's compiler doesn't do it for you on purpose.
-- `match` patterns cover literals, identifiers, and one-level discriminants — no nested destructuring or guard clauses yet.
+- **Derive macros** — `#[derive(Clone, Equals, …)]` on a struct. Each derived name resolves to a registered macro that emits a Lua function attached to the struct's table.
+- **Field-constraint macros** — `#[minLength(1)]` etc. on a struct field. Emit Lua runtime guards that get woven into the struct's `.new` factory.
+- **Function-attribute macros** — `#[attr]` on a function declaration. Reserved for future use; the bundled set ships empty (route-verb / sql / command macros from the prior TS-targeting era were dropped).
 
-## License
+A custom macro is a plain TypeScript module exporting one or more `Macro` objects:
+
+```ts
+import type { FieldConstraintMacro } from "@flying-dice/neoc-compiler/macro";
+
+export const isUuid: FieldConstraintMacro = {
+  kind: "field-constraint",
+  name: "uuid",
+  emit(_ctx, { struct, field }) {
+    return [
+      `if not string.match(data.${field.name}, "^[0-9a-f-]+$") then error("${struct.name}.${field.name}: not a uuid") end`,
+    ];
+  },
+};
+```
+
+Pass it to `neoc build --macros ./macros/uuid.ts`. The compiler loads the module dynamically and registers every macro it exports.
+
+## What the language deliberately doesn't have
+
+neoc-script is a **sibling dialect** of Lua, not a superset. The grammar covers a deliberate declaration surface — `struct`, `impl`, `trait`, `match`, `#[…]`, `Self` — and stops there. Anything that already has a Lua form (tables, functions, control flow, modules) is written in Lua directly inside method bodies and the gaps between declarations.
+
+The grammar tolerates expressions in bodies as opaque text. Inside `{ … }` and between declarations, the user is writing Lua. The compiler doesn't try to translate JS-flavoured operators (`===`, `&&`, `||`) into Lua equivalents — write `==`, `and`, `or` yourself.
+
+See [specs/](specs/) for the full feature list and [specs/roadmap.md](specs/roadmap.md) for what isn't built yet.
+
+## Repository layout
+
+```
+src/neoc/
+├── ast/                       # generated typed AST + index
+├── codegen/
+│   └── lua/index.ts          # the only codegen target
+├── macros/
+│   ├── api.ts                 # public types for macro authors
+│   ├── builtins.ts            # Clone, Equals, ToTable, Display, …
+│   └── registry.ts            # registration + lookup
+├── parser/
+│   ├── adapter.ts             # tree-sitter walker → typed AST
+│   ├── lower-match.ts         # match expression → Lua IIFE
+│   ├── tree-sitter.ts         # WASM loader
+│   └── index.ts
+├── compiler.ts                # transpile(source) → { lua, diagnostics }
+├── driver.ts                  # CLI build orchestrator
+└── lsp.ts                     # stdio language server
+
+zed/                           # Zed extension + tree-sitter grammar
+intellij/                      # WebStorm / IDEA plugin
+specs/                         # BDD-style language specs
+examples/                      # showcase.neoc
+```
+
+## Licence
 
 MIT.
