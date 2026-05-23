@@ -1,59 +1,67 @@
 # Roadmap
 
-Features common to major statically-typed languages (Rust, Swift, Kotlin, modern TypeScript, Scala) that tsb does **not** yet support. Each entry is sized to one future spec pair (`<feature>.md` + `ide-<feature>.md`).
+Features common to major statically-typed languages that tsb does **not** yet support.
 
-Grouped by theme, ordered roughly by leverage — items near the top unlock the most downstream work.
+tsb is a TypeScript dialect — whenever the feature already has a TypeScript surface, the spec sticks with **TS syntax** rather than inventing a Rust-style one. The work for those entries is awareness in the parser / LSP, not new grammar.
 
-## Type system
+Each entry is sized to one future spec pair (`<feature>.md` + `ide-<feature>.md`).
 
-- **Visibility modifiers** — `pub` / module-private declarations. Today every `export`ed name is public; everything else is module-local. There's no fine-grained `pub(crate)`-style scoping.
-- **Full generics** — generic parameters on `function`, `struct`, `trait`, and `impl` exist in the grammar, but there are no `T: Trait` constraints, no `where` clauses, no variance markers. Most real designs need at least bounded generics.
-- **Associated types on traits** — `trait Iterator { type Item; … }` and the impl-time binding `impl Iterator for Foo { type Item = Bar; }`. Today only methods are trait-able.
-- **Type aliases with arguments** — `type Pair<T> = { left: T; right: T }`. Today the alias keyword exists for unions; parameterised aliases aren't lowered.
-- **Newtype structs** — tuple-struct shorthand `struct ProductId(string)` with `.value` access. Today every newtype requires a one-field struct.
+## Already in TypeScript — needs tsb awareness only
 
-## Errors & control flow
+These features parse today via the TypeScript inheritance, but the parser and LSP don't surface them as first-class concepts. The spec for each describes the existing TS form and what tsb needs to do to recognise it (completion, hover, goto, refactor).
 
-- **`if let` / `let else`** — pattern-binding conditional forms over `Result`, `Option`, and struct unions. Today the only pattern-matching form is `match`.
-- **`?` operator on `Result`** — propagate the error variant without explicit match. Today every Result has to be matched by hand.
-- **Pattern guards in `match`** — `case Foo { x } if x > 0 => …`. Today arms can't carry guard expressions.
-- **`Option<T>`** — explicit `Option` type as a struct union (`Some<T>` | `None`). Today nullability uses TS `| undefined`.
-- **Exhaustiveness checking on `match`** — compile-time error when a struct union isn't fully covered. Today the runtime throws `match: no arm matched`.
+- **Generic constraints** — `function f<T extends Foo>(x: T)`. The grammar accepts it; the LSP doesn't yet surface `T`'s bound in hover or completion. Use TS `extends`, not Rust `T: Trait`.
+- **Parameterised type aliases** — `type Pair<T> = { left: T; right: T }`. Grammar accepts; LSP doesn't yet resolve `Pair<string>` to `{ left: string; right: string }` for completion / hover.
+- **Closures** — arrow functions `(x, y) => x + y`. Already work. The LSP needs to treat them as first-class so signature help and parameter-type completion fire inside the body.
+- **Destructuring in `let`** — `const { name, priceCents } = product`. Already parses; the LSP doesn't yet contribute the destructured names to local completion.
+- **`use` / re-exports** — TS already covers this with `export * from "./x"`, `export { foo } from "./x"`. No new keyword. The LSP needs to follow re-exports when resolving symbols across files.
+- **`mod`-style modules** — TS's file-is-a-module convention is the tsb convention. No new keyword. The LSP's workspace symbol index already follows it.
+- **`Option<T>`** — TS expresses optionality as `T | undefined`. No new type. The LSP needs to teach completion / hover that `| undefined` is the canonical "absent" union.
+- **String interpolation** — TS template literals `` `${a}-${b}` ``. Already work. No `format!` macro is needed.
+- **Built-in test runner** — `bun test` is the runner. tsb test files use the same harness. The spec is for `bunny test` as a thin wrapper that resolves `.tsb` test files (and a `#[test]` attribute that names exported test functions, if we want one).
 
-## Expressions
+## New to tsb — needs both grammar and runtime
 
-- **Closures with concise syntax** — `|x, y| x + y` or `(x, y) => x + y` as first-class values. Today arrow functions inherited from TS exist; we don't have a tsb-blessed shorthand.
-- **Iterator / sequence trait** — a stdlib `Iterator` trait + `for x of seq` desugaring driving `.next()`. Today `for` is the TS for-of with no language-level abstraction.
-- **Range expressions** — `0..n`, `0..=n`, `a..b`. Today these don't parse.
-- **Operator overloading via trait impls** — `impl Add for Money` etc. driving `+`, `-`, `==`, `<`. Today operators are TS-native.
-- **Block expressions** — a `{ … final-expr }` block that is itself an expression. Today blocks are statements only.
+These have no TypeScript parallel. Each needs its own syntax decision, but where possible the syntax leans on JS / TS idiom rather than Rust.
 
-## Modules & bindings
+### Type system
 
-- **`use` / re-exports** — pull names from another module without re-typing the path, or re-publish them. Today every import lists the names directly.
-- **`mod`-style module declarations** — first-class module groupings beyond per-file. Today the module unit is the file.
-- **`let` destructuring** — `let { name, priceCents } = product;`. Today destructuring works via inherited TS, but isn't part of the tsb grammar specifically and isn't surfaced by completion / hover.
-- **`const` evaluation** — compile-time evaluation of `const` initialisers for use in attributes and type-level contexts. Today only literal arguments work in `#[…]`.
+- **Visibility beyond `export`** — finer-grained `pub(module)` / `pub(crate)` style. Today every non-`export` declaration is module-local; everything `export`ed is public to the workspace. There is no in-between. Optional; many TS projects live without this.
+- **Associated types on traits** — `trait Iterator { type Item; … }` and `impl Iterator for Foo { type Item = Bar; }`. No TypeScript parallel. Rust-style.
+- **Newtype shorthand** — `struct ProductId(string)` desugars to a one-field struct with `.value` access. Today every newtype is the explicit longhand. Rust-style.
 
-## Macros
+### Errors & control flow
+
+- **`?` operator on `Result`** — propagate the `Err` variant without an explicit match. No TS parallel. Rust-style.
+- **Pattern guards in `match`** — `Foo { x } if x > 0 => …`. TS has no `match`. tsb's `match` already exists; guards are an additive grammar extension.
+- **Exhaustiveness checking on `match`** — compile-time error when a struct union or boolean discriminant isn't fully covered. Today the runtime throws `match: no arm matched`. The static check is tsb's responsibility; TS's `never` trick is what we already lean on for the discriminated-union pattern in plain TS code.
+- **`if let` / `while let`** — pattern-binding conditional forms over a struct union. TS has type narrowing via `if (x.ok) { … }`; this is the pattern-using equivalent of that idiom. Optional — `match` covers the use case already.
+
+### Expressions
+
+- **Iterator / sequence protocol** — a tsb-blessed `Iterator` trait that drives `for x of seq`. TS has `Symbol.iterator`; the spec should re-use that protocol unchanged so JS iterables interop for free.
+- **Range expressions** — `0..n`, `0..=n`, `a..b`. No TS parallel. Pure tsb sugar; lowers to a number-range iterator.
+- **Operator overloading via trait impls** — `impl Add for Money` etc. driving `+`, `==`, `<`. TS / JS has no operator overloading. Rust-style, but only worth it if `match` + `Iterator` land first.
+- **Block expressions** — a `{ … final-expr }` block that itself yields a value. TS doesn't have these. Lowers to an IIFE.
+
+### Macros
 
 - **Custom user macros** — extension-point so projects can register their own derive / field-constraint / function-attribute macros. Today the macro registry is closed and `builtins.ts` is the only source.
-- **`format!` / `println!`-style macros** — interpolation macros that lower to template-literal calls with type-checked argument lists. Today string interpolation uses raw TS template literals.
 
-## Tooling
+### Tooling
 
-- **Built-in test framework** — `#[test]` on a function, `bunny test` runner, assertion macros. Today tests live in `*.test.ts` using Bun's runner.
-- **Built-in benchmark framework** — `#[bench]` on a function. Today there isn't one.
-- **Doctest blocks** — fenced code in `///` doc comments executed by the test runner. Today doc bodies are pure prose.
-- **Documentation generator** — `bunny doc` producing a static site from `///` doc comments. Today docs live in the LSP hover only.
+- **`#[test]` and `bunny test`** — `#[test]` attribute on an exported function; `bunny test` discovers them and runs through Bun's runner. The wrapper part is `bunny test`; the attribute is the new grammar bit.
+- **`#[bench]` and `bunny bench`** — same shape, benchmark variant.
+- **Doctest blocks** — fenced code in `///` doc comments executed by the test runner.
+- **`bunny doc`** — static-site documentation generator that consumes `///` doc comments.
 
 ## Editor (Zed) backlog
 
 - **Find references** — workspace-wide `goto-references` on any symbol. Today only `goto-definition` is wired.
-- **Rename symbol** — coordinated rename across the workspace. Today no rename.
-- **Workspace symbols** — `cmd-T` style search across all declarations. Today only completion / hover use the index.
-- **Signature help** — parameter hint popup inside a function call. Today no signature help.
-- **Code lens** — inline hints (run / test / # references) above declarations. Today no lens.
-- **Format on save** — a `bunny fmt` formatter wired through the LSP `textDocument/formatting`. Today there is no formatter.
-- **Outline / structure view** — a panel listing every struct / trait / impl / function in the file. Today no outline.
-- **Inlay hints** — inferred types shown inline at let bindings and method returns. Today no inlay hints.
+- **Rename symbol** — coordinated rename across the workspace.
+- **Workspace symbol search** — `cmd-T` style search across all declarations. Today only completion / hover use the index.
+- **Signature help** — parameter hint popup inside a function call.
+- **Code lens** — inline hints (run / test / # references) above declarations.
+- **Format on save** — a `bunny fmt` formatter wired through the LSP `textDocument/formatting`.
+- **Outline / structure view** — a panel listing every struct / trait / impl / function in the file.
+- **Inlay hints** — inferred types shown inline at let bindings and method returns.
