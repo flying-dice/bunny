@@ -1,0 +1,54 @@
+# tsb — WebStorm plugin
+
+Syntax highlighting, completion, hover, diagnostics, and quick-fixes for `.tsb` files in WebStorm.
+
+## How it works
+
+- **Highlighting** — native Kotlin lexer + `SyntaxHighlighter` (no LSP dependency for colour). Tokenises keywords, type keywords, doc comments, attributes, strings, numbers.
+- **Semantic features** — bridged to the bunny LSP server. The plugin spawns `bunny lsp` over stdio when the first `.tsb` file in a project opens.
+
+## Requirements
+
+- WebStorm 2023.2+ (the IntelliJ Platform LSP API ships from 232).
+- `bunny` on PATH.
+
+Install bunny globally so `bunny lsp` resolves:
+
+```
+cd /path/to/bunny
+bun install
+bun link
+```
+
+## Build & sideload
+
+The repo doesn't ship the Gradle wrapper jar. Install Gradle 8.5+ once (`brew install gradle` or equivalent), then bootstrap the wrapper:
+
+```
+cd intellij
+gradle wrapper --gradle-version 8.10
+./gradlew buildPlugin
+```
+
+The plugin zip lands in `build/distributions/tsb-intellij-<version>.zip`. In WebStorm, `Settings → Plugins → ⚙ → Install Plugin from Disk…` and pick that file.
+
+To iterate against a sandboxed IDE without packaging:
+
+```
+./gradlew runIde
+```
+
+## Dev mode — point the LSP at a checkout
+
+Set `TSB_LSP_COMMAND` before launching WebStorm to use a repo-local LSP instead of the globally-linked one:
+
+```
+export TSB_LSP_COMMAND="bun /Users/me/Projects/bunny/src/cli.ts lsp"
+```
+
+The plugin splits the value on whitespace and runs it from the project's base directory.
+
+## What's not (yet) here
+
+- A native parser / PSI tree. We rely entirely on the LSP for resolution, refactors, structure view, find-usages.
+- Settings UI for the LSP command — `TSB_LSP_COMMAND` is the escape hatch for now.

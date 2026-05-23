@@ -1,0 +1,41 @@
+<idea-plugin>
+  <id>com.flyingdice.tsb</id>
+  <name>tsb (Bunny)</name>
+  <vendor email="hello@flying-dice.com" url="https://github.com/flying-dice/bunny">Flying Dice</vendor>
+
+  <description><![CDATA[
+    <h2>tsb language support for WebStorm</h2>
+    <p>
+      Syntax highlighting, completion, hover, diagnostics, and quick-fixes
+      for <a href="https://github.com/flying-dice/bunny">tsb</a> — a
+      Rust-flavoured TypeScript dialect.
+    </p>
+    <p>
+      Semantic features come from the bunny LSP server. Install bunny so
+      that <code>bunny lsp</code> resolves on your PATH, then open any
+      <code>.tsb</code> file.
+    </p>
+  ]]></description>
+
+  <depends>com.intellij.modules.platform</depends>
+
+  <extensions defaultExtensionNs="com.intellij">
+    <fileType
+      name="tsb"
+      implementationClass="com.flyingdice.tsb.TsbFileType"
+      fieldName="INSTANCE"
+      language="tsb"
+      extensions="tsb"/>
+
+    <lang.parserDefinition
+      language="tsb"
+      implementationClass="com.flyingdice.tsb.TsbParserDefinition"/>
+
+    <lang.syntaxHighlighterFactory
+      language="tsb"
+      implementationClass="com.flyingdice.tsb.TsbSyntaxHighlighterFactory"/>
+
+    <platform.lsp.serverSupportProvider
+      implementation="com.flyingdice.tsb.TsbLspServerSupportProvider"/>
+  </extensions>
+</idea-plugin>
