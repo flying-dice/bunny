@@ -1,0 +1,215 @@
+==================
+function declaration
+==================
+
+function add(a: number, b: number): number {
+  return a + b;
+}
+
+---
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    parameters: (arrow_parameters
+      (formal_parameter
+        name: (identifier)
+        type: (primitive_type))
+      (formal_parameter
+        name: (identifier)
+        type: (primitive_type)))
+    return_type: (primitive_type)
+    body: (statement_block
+      (return_statement
+        (binary_expression
+          (identifier)
+          (identifier))))))
+
+==================
+exported async function
+==================
+
+export async function load(): Promise<string> {
+  return "ok";
+}
+
+---
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    parameters: (arrow_parameters)
+    return_type: (generic_type
+      name: (type_identifier)
+      arguments: (type_arguments
+        (primitive_type)))
+    body: (statement_block
+      (return_statement
+        (string
+          (string_fragment_double))))))
+
+==================
+struct declaration
+==================
+
+struct BadNumber {
+  input: string,
+}
+
+---
+
+(source_file
+  (struct_declaration
+    name: (type_identifier)
+    body: (struct_body
+      (struct_field
+        name: (identifier)
+        type: (primitive_type)))))
+
+==================
+struct with multiple fields
+==================
+
+struct Product {
+  id: string,
+  priceCents: number,
+  inStock: boolean,
+}
+
+---
+
+(source_file
+  (struct_declaration
+    name: (type_identifier)
+    body: (struct_body
+      (struct_field
+        name: (identifier)
+        type: (primitive_type))
+      (struct_field
+        name: (identifier)
+        type: (primitive_type))
+      (struct_field
+        name: (identifier)
+        type: (primitive_type)))))
+
+==================
+generic struct
+==================
+
+struct Box<T> {
+  value: T,
+}
+
+---
+
+(source_file
+  (struct_declaration
+    name: (type_identifier)
+    generics: (type_parameters
+      (type_parameter
+        name: (type_identifier)))
+    body: (struct_body
+      (struct_field
+        name: (identifier)
+        type: (named_type
+          (type_identifier))))))
+
+==================
+inherent impl
+==================
+
+impl Product {
+  new(data: Product): Product {
+    return data;
+  }
+}
+
+---
+
+(source_file
+  (impl_declaration
+    first: (type_identifier)
+    body: (impl_body
+      (impl_method
+        name: (identifier)
+        parameters: (arrow_parameters
+          (formal_parameter
+            name: (identifier)
+            type: (named_type
+              (type_identifier))))
+        return_type: (named_type
+          (type_identifier))
+        body: (statement_block
+          (return_statement
+            (identifier)))))))
+
+==================
+trait impl
+==================
+
+impl Display for Product {
+  fmt(self: Product): string {
+    return self.name;
+  }
+}
+
+---
+
+(source_file
+  (impl_declaration
+    first: (type_identifier)
+    target: (type_identifier)
+    body: (impl_body
+      (impl_method
+        name: (identifier)
+        parameters: (arrow_parameters
+          (formal_parameter
+            name: (identifier)
+            type: (named_type
+              (type_identifier))))
+        return_type: (primitive_type)
+        body: (statement_block
+          (return_statement
+            (member_expression
+              object: (identifier)
+              property: (identifier))))))))
+
+==================
+trait declaration with required + default
+==================
+
+trait Display {
+  fmt(self: Self): string;
+  show(self: Self): string {
+    return Self.fmt(self);
+  }
+}
+
+---
+
+(source_file
+  (trait_declaration
+    name: (type_identifier)
+    body: (trait_body
+      (trait_method
+        name: (identifier)
+        parameters: (arrow_parameters
+          (formal_parameter
+            name: (identifier)
+            type: (self_type)))
+        return_type: (primitive_type))
+      (trait_method
+        name: (identifier)
+        parameters: (arrow_parameters
+          (formal_parameter
+            name: (identifier)
+            type: (self_type)))
+        return_type: (primitive_type)
+        body: (statement_block
+          (return_statement
+            (call_expression
+              function: (member_expression
+                object: (identifier)
+                property: (identifier))
+              arguments: (arguments
+                (identifier)))))))))

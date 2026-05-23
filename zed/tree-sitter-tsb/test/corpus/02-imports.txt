@@ -1,0 +1,135 @@
+==================
+named import
+==================
+
+import { Foo } from "./foo.ts";
+
+---
+
+(source_file
+  (import_statement
+    (import_clause
+      (named_imports
+        (import_specifier
+          name: (identifier))))
+    source: (string
+      (string_fragment_double))))
+
+==================
+named import with alias
+==================
+
+import { Foo as Bar } from "./foo.ts";
+
+---
+
+(source_file
+  (import_statement
+    (import_clause
+      (named_imports
+        (import_specifier
+          name: (identifier)
+          alias: (identifier))))
+    source: (string
+      (string_fragment_double))))
+
+==================
+type-only import
+==================
+
+import type { Foo } from "./foo.ts";
+
+---
+
+(source_file
+  (import_statement
+    (import_clause
+      (named_imports
+        (import_specifier
+          name: (identifier))))
+    source: (string
+      (string_fragment_double))))
+
+==================
+namespace import
+==================
+
+import * as foo from "./foo.ts";
+
+---
+
+(source_file
+  (import_statement
+    (import_clause
+      (namespace_import
+        (identifier)))
+    source: (string
+      (string_fragment_double))))
+
+==================
+default + named imports
+==================
+
+import Foo, { Bar, Baz } from "./foo.ts";
+
+---
+
+(source_file
+  (import_statement
+    (import_clause
+      default: (identifier)
+      (named_imports
+        (import_specifier
+          name: (identifier))
+        (import_specifier
+          name: (identifier))))
+    source: (string
+      (string_fragment_double))))
+
+==================
+import-specifier per-item type modifier
+==================
+
+import { type Foo, Bar } from "./foo.ts";
+
+---
+
+(source_file
+  (import_statement
+    (import_clause
+      (named_imports
+        (import_specifier
+          name: (identifier))
+        (import_specifier
+          name: (identifier))))
+    source: (string
+      (string_fragment_double))))
+
+==================
+re-export from
+==================
+
+export { Foo } from "./foo.ts";
+
+---
+
+(source_file
+  (export_statement
+    (named_imports
+      (import_specifier
+        name: (identifier)))
+    source: (string
+      (string_fragment_double))))
+
+==================
+star re-export
+==================
+
+export * from "./foo.ts";
+
+---
+
+(source_file
+  (export_statement
+    source: (string
+      (string_fragment_double))))

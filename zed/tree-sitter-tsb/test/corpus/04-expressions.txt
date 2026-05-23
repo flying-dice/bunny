@@ -1,0 +1,239 @@
+==================
+binary expression — arithmetic
+==================
+
+1 + 2 * 3;
+
+---
+
+(source_file
+  (binary_expression
+    (number)
+    (binary_expression
+      (number)
+      (number))))
+
+==================
+binary expression — comparison
+==================
+
+a === b;
+
+---
+
+(source_file
+  (binary_expression
+    (identifier)
+    (identifier)))
+
+==================
+ternary expression
+==================
+
+ok ? a : b;
+
+---
+
+(source_file
+  (ternary_expression
+    cond: (identifier)
+    then: (identifier)
+    else: (identifier)))
+
+==================
+unary not
+==================
+
+!flag;
+
+---
+
+(source_file
+  (unary_expression
+    (identifier)))
+
+==================
+function call
+==================
+
+doStuff(a, b);
+
+---
+
+(source_file
+  (call_expression
+    function: (identifier)
+    arguments: (arguments
+      (identifier)
+      (identifier))))
+
+==================
+member chain
+==================
+
+foo.bar.baz;
+
+---
+
+(source_file
+  (member_expression
+    object: (member_expression
+      object: (identifier)
+      property: (identifier))
+    property: (identifier)))
+
+==================
+optional chain
+==================
+
+req?.params?.id;
+
+---
+
+(source_file
+  (member_expression
+    object: (member_expression
+      object: (identifier)
+      property: (identifier))
+    property: (identifier)))
+
+==================
+subscript
+==================
+
+list[0];
+
+---
+
+(source_file
+  (subscript_expression
+    object: (identifier)
+    index: (number)))
+
+==================
+arrow with no params
+==================
+
+() => 42;
+
+---
+
+(source_file
+  (arrow_function
+    parameters: (arrow_parameters)
+    body: (number)))
+
+==================
+arrow with typed params
+==================
+
+(x: number, y: number) => x + y;
+
+---
+
+(source_file
+  (arrow_function
+    parameters: (arrow_parameters
+      (formal_parameter
+        name: (identifier)
+        type: (primitive_type))
+      (formal_parameter
+        name: (identifier)
+        type: (primitive_type)))
+    body: (binary_expression
+      (identifier)
+      (identifier))))
+
+==================
+arrow with statement-block body
+==================
+
+x => { return x; };
+
+---
+
+(source_file
+  (arrow_function
+    parameters: (identifier)
+    body: (statement_block
+      (return_statement
+        (identifier)))))
+
+==================
+object literal
+==================
+
+({ a: 1, b, ...rest });
+
+---
+
+(source_file
+  (parenthesised_expression
+    (object_literal
+      (object_property
+        key: (identifier)
+        value: (number))
+      (shorthand_property
+        (identifier))
+      (spread_element
+        (identifier)))))
+
+==================
+array literal
+==================
+
+[1, 2, 3];
+
+---
+
+(source_file
+  (array_literal
+    (number)
+    (number)
+    (number)))
+
+==================
+template string with substitution
+==================
+
+`hello ${name}!`;
+
+---
+
+(source_file
+  (template_string
+    (template_chars)
+    (template_substitution
+      (identifier))
+    (template_chars)))
+
+==================
+assignment expression
+==================
+
+x = 42;
+
+---
+
+(source_file
+  (assignment_expression
+    left: (identifier)
+    right: (number)))
+
+==================
+chained call
+==================
+
+foo().bar(baz);
+
+---
+
+(source_file
+  (call_expression
+    function: (member_expression
+      object: (call_expression
+        function: (identifier)
+        arguments: (arguments))
+      property: (identifier))
+    arguments: (arguments
+      (identifier))))

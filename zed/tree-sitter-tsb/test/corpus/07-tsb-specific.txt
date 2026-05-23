@@ -1,0 +1,193 @@
+==================
+match with struct + wildcard arms
+==================
+
+match err {
+  BadNumber { input } => input,
+  _ => "unknown",
+};
+
+---
+
+(source_file
+  (match_expression
+    scrutinee: (identifier)
+    (match_arm
+      pattern: (struct_pattern
+        name: (type_identifier)
+        body: (pattern_body
+          (pattern_shorthand
+            (identifier))))
+      body: (identifier))
+    (match_arm
+      pattern: (wildcard_pattern)
+      body: (string
+        (string_fragment_double)))))
+
+==================
+match on Result with object-pattern bindings
+==================
+
+match r {
+  { ok: true, value: v } => v,
+  { ok: false, error: e } => e,
+};
+
+---
+
+(source_file
+  (match_expression
+    scrutinee: (identifier)
+    (match_arm
+      pattern: (object_pattern
+        (pattern_body
+          (pattern_check
+            key: (identifier)
+            value: (boolean))
+          (pattern_bind
+            key: (identifier)
+            binding: (identifier))))
+      body: (identifier))
+    (match_arm
+      pattern: (object_pattern
+        (pattern_body
+          (pattern_check
+            key: (identifier)
+            value: (boolean))
+          (pattern_bind
+            key: (identifier)
+            binding: (identifier))))
+      body: (identifier))))
+
+==================
+match on literal
+==================
+
+match status {
+  200 => "ok",
+  404 => "not found",
+  _ => "?",
+};
+
+---
+
+(source_file
+  (match_expression
+    scrutinee: (identifier)
+    (match_arm
+      pattern: (literal_pattern
+        (number))
+      body: (string
+        (string_fragment_double)))
+    (match_arm
+      pattern: (literal_pattern
+        (number))
+      body: (string
+        (string_fragment_double)))
+    (match_arm
+      pattern: (wildcard_pattern)
+      body: (string
+        (string_fragment_double)))))
+
+==================
+attribute on struct
+==================
+
+#[derive(Clone, Equals)]
+struct Foo {
+  id: string,
+}
+
+---
+
+(source_file
+  (attributed_declaration
+    (attribute
+      (attribute_item
+        name: (identifier)
+        arguments: (attribute_arguments
+          (identifier)
+          (identifier))))
+    (struct_declaration
+      name: (type_identifier)
+      body: (struct_body
+        (struct_field
+          name: (identifier)
+          type: (primitive_type))))))
+
+==================
+field-level constraints
+==================
+
+struct User {
+  #[format("email")]
+  email: string,
+  #[minLength(1), maxLength(120)]
+  name: string,
+}
+
+---
+
+(source_file
+  (struct_declaration
+    name: (type_identifier)
+    body: (struct_body
+      (struct_field
+        (attribute
+          (attribute_item
+            name: (identifier)
+            arguments: (attribute_arguments
+              (string
+                (string_fragment_double)))))
+        name: (identifier)
+        type: (primitive_type))
+      (struct_field
+        (attribute
+          (attribute_item
+            name: (identifier)
+            arguments: (attribute_arguments
+              (number)))
+          (attribute_item
+            name: (identifier)
+            arguments: (attribute_arguments
+              (number))))
+        name: (identifier)
+        type: (primitive_type)))))
+
+==================
+route attribute on function
+==================
+
+#[get("/products/:id")]
+export function getProduct(id: string): Product {
+  return Product.new({ id });
+}
+
+---
+
+(source_file
+  (attributed_declaration
+    (attribute
+      (attribute_item
+        name: (identifier)
+        arguments: (attribute_arguments
+          (string
+            (string_fragment_double)))))
+    (function_declaration
+      name: (identifier)
+      parameters: (arrow_parameters
+        (formal_parameter
+          name: (identifier)
+          type: (primitive_type)))
+      return_type: (named_type
+        (type_identifier))
+      body: (statement_block
+        (return_statement
+          (call_expression
+            function: (member_expression
+              object: (identifier)
+              property: (identifier))
+            arguments: (arguments
+              (object_literal
+                (shorthand_property
+                  (identifier))))))))))

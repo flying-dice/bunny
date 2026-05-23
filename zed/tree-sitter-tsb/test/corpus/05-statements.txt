@@ -1,0 +1,69 @@
+==================
+let with type and value
+==================
+
+let count: number = 0;
+
+---
+
+(source_file
+  (variable_declaration
+    name: (identifier)
+    type: (primitive_type)
+    value: (number)))
+
+==================
+const inferred
+==================
+
+const name = "alice";
+
+---
+
+(source_file
+  (variable_declaration
+    name: (identifier)
+    value: (string
+      (string_fragment_double))))
+
+==================
+return with value
+==================
+
+return 42;
+
+---
+
+(source_file
+  (return_statement
+    (number)))
+
+==================
+return empty
+==================
+
+return;
+
+---
+
+(source_file
+  (return_statement))
+
+==================
+if-else statement
+==================
+
+if (a > 0) return a; else return -1;
+
+---
+
+(source_file
+  (if_statement
+    condition: (binary_expression
+      (identifier)
+      (number))
+    consequence: (return_statement
+      (identifier))
+    alternative: (return_statement
+      (unary_expression
+        (number)))))

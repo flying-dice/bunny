@@ -1,0 +1,180 @@
+==================
+type alias to primitive
+==================
+
+type Id = string;
+
+---
+
+(source_file
+  (type_alias
+    name: (type_identifier)
+    value: (primitive_type)))
+
+==================
+type alias union of primitives
+==================
+
+type Maybe = string | number | null;
+
+---
+
+(source_file
+  (type_alias
+    name: (type_identifier)
+    value: (union_type
+      (primitive_type)
+      (primitive_type)
+      (null_literal))))
+
+==================
+type alias named-type union
+==================
+
+type Either = Foo | Bar;
+
+---
+
+(source_file
+  (type_alias
+    name: (type_identifier)
+    value: (union_type
+      (named_type
+        (type_identifier))
+      (named_type
+        (type_identifier)))))
+
+==================
+generic type
+==================
+
+type Pair = Map<string, number>;
+
+---
+
+(source_file
+  (type_alias
+    name: (type_identifier)
+    value: (generic_type
+      name: (type_identifier)
+      arguments: (type_arguments
+        (primitive_type)
+        (primitive_type)))))
+
+==================
+array type
+==================
+
+type Names = string[];
+
+---
+
+(source_file
+  (type_alias
+    name: (type_identifier)
+    value: (array_type
+      (primitive_type))))
+
+==================
+tuple type
+==================
+
+type Pair = [string, number];
+
+---
+
+(source_file
+  (type_alias
+    name: (type_identifier)
+    value: (tuple_type
+      (primitive_type)
+      (primitive_type))))
+
+==================
+function type
+==================
+
+type Handler = (req: string, ctx: number) => boolean;
+
+---
+
+(source_file
+  (type_alias
+    name: (type_identifier)
+    value: (function_type
+      (type_parameter_decl
+        name: (identifier)
+        type: (primitive_type))
+      (type_parameter_decl
+        name: (identifier)
+        type: (primitive_type))
+      (primitive_type))))
+
+==================
+object type literal
+==================
+
+type Point = { x: number; y: number };
+
+---
+
+(source_file
+  (type_alias
+    name: (type_identifier)
+    value: (object_type
+      (property_signature
+        name: (identifier)
+        type: (primitive_type))
+      (property_signature
+        name: (identifier)
+        type: (primitive_type)))))
+
+==================
+generic type-alias declaration
+==================
+
+type Box<T> = { value: T };
+
+---
+
+(source_file
+  (type_alias
+    name: (type_identifier)
+    (type_parameters
+      (type_parameter
+        name: (type_identifier)))
+    value: (object_type
+      (property_signature
+        name: (identifier)
+        type: (named_type
+          (type_identifier))))))
+
+==================
+Self type
+==================
+
+type Returns = Self;
+
+---
+
+(source_file
+  (type_alias
+    name: (type_identifier)
+    value: (self_type)))
+
+==================
+exported type alias
+==================
+
+export type Status = "ok" | "err";
+
+---
+
+(source_file
+  (type_alias
+    name: (type_identifier)
+    value: (union_type
+      (string
+        (string_fragment_double))
+      (string
+        (string_fragment_double)))))

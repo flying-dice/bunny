@@ -1,0 +1,138 @@
+==================
+empty source file
+==================
+
+---
+
+(source_file)
+
+==================
+line comment
+==================
+
+// a comment
+
+---
+
+(source_file
+  (line_comment))
+
+==================
+block comment
+==================
+
+/* multi
+   line */
+
+---
+
+(source_file
+  (block_comment))
+
+==================
+identifier expression
+==================
+
+foo;
+
+---
+
+(source_file
+  (identifier))
+
+==================
+number literal — integer
+==================
+
+42;
+
+---
+
+(source_file
+  (number))
+
+==================
+number literal — float with exponent
+==================
+
+3.14e10;
+
+---
+
+(source_file
+  (number))
+
+==================
+number literal — hex
+==================
+
+0xDEADBEEF;
+
+---
+
+(source_file
+  (number))
+
+==================
+double-quoted string
+==================
+
+"hello";
+
+---
+
+(source_file
+  (string
+    (string_fragment_double)))
+
+==================
+single-quoted string
+==================
+
+'hi';
+
+---
+
+(source_file
+  (string
+    (string_fragment_single)))
+
+==================
+string with escape
+==================
+
+"line\nbreak";
+
+---
+
+(source_file
+  (string
+    (string_fragment_double)
+    (escape_sequence)
+    (string_fragment_double)))
+
+==================
+boolean literals
+==================
+
+true;
+false;
+
+---
+
+(source_file
+  (boolean)
+  (boolean))
+
+==================
+null and undefined
+==================
+
+null;
+undefined;
+
+---
+
+(source_file
+  (null_literal)
+  (undefined_literal))
