@@ -831,24 +831,50 @@ function buildImplementMissingAction(
   diag: LspDiagnostic,
   data: MissingTraitMethodsData,
 ): CodeAction {
-  // Insert right before the impl block's closing brace. Walk back
-  // from impl.span.end to find the `}` so we land in the right slot
-  // even if there's trailing whitespace inside the source range.
   const text = doc.text;
-  let insertAt = data.implSpan.end;
-  while (insertAt > 0 && text[insertAt - 1] !== "}") insertAt--;
-  if (insertAt > 0) insertAt -= 1; // position of `}`
+  // Locate the impl block's open `{` and matching close `}`.
+  const head = text.slice(data.implSpan.start, data.implSpan.end);
+  const openRel = head.indexOf("{");
+  const openBrace = data.implSpan.start + openRel;
+  let closeBrace = data.implSpan.end;
+  while (closeBrace > openBrace && text[closeBrace - 1] !== "}") closeBrace--;
+  closeBrace -= 1; // position of the `}` itself
+
   const indent = "  ";
-  const body = data.missing
+  const stubs = data.missing
     .map((m) => renderMethodStub(m, data.implName, indent))
-    .join("\n");
-  // If the block isn't empty, separate from the last method with a blank line.
-  const blockHead = text.slice(data.implSpan.start, insertAt);
-  const lastChar = blockHead.replace(/\s+$/, "").slice(-1);
-  const lead = lastChar === "{" ? "\n" : "\n\n";
-  const newText = `${lead}${body}\n`;
-  const insertPos = offsetToPosition(text, insertAt);
-  const edit: TextEdit = { range: { start: insertPos, end: insertPos }, newText };
+    .join("\n\n");
+
+  // Inside content (between `{` and `}`, exclusive of both).
+  const innerStart = openBrace + 1;
+  const innerEnd = closeBrace;
+  const inner = text.slice(innerStart, innerEnd);
+
+  let replacement: string;
+  let editStart: number;
+  let editEnd: number;
+  if (inner.trim() === "") {
+    // Empty impl body — replace all interior whitespace with a single
+    // canonical block so we never compound blank lines.
+    replacement = `\n${stubs}\n`;
+    editStart = innerStart;
+    editEnd = innerEnd;
+  } else {
+    // Non-empty body — append stubs after the last existing method.
+    // Anchor at the first non-whitespace char before `}` so we keep
+    // existing trailing whitespace intact.
+    let anchor = innerEnd;
+    while (anchor > innerStart && /\s/.test(text[anchor - 1] ?? "")) anchor--;
+    replacement = `\n\n${stubs}\n`;
+    editStart = anchor;
+    editEnd = innerEnd;
+  }
+
+  const range = {
+    start: offsetToPosition(text, editStart),
+    end: offsetToPosition(text, editEnd),
+  };
+  const edit: TextEdit = { range, newText: replacement };
   return {
     title: `Implement missing methods (${data.missing.length})`,
     kind: "quickfix",
