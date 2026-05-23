@@ -133,19 +133,15 @@ export function emit(
   // `impl Foo { new(data: Foo): Foo { return data; } }` so the derived
   // / trait methods have a const block to land in — and so field
   // constraints have a `new` to inject their guards into.
+  // Every struct gets an inherent impl — at minimum, the synthesised
+  // `new(data)` factory that injects the `_struct` brand. User-written
+  // impl blocks take precedence; if one already exists we leave it
+  // alone (and the user is responsible for setting `_struct` if they
+  // want branding to apply to their hand-rolled constructor).
   const syntheticImpls = new Map<string, M.ImplDecl>();
   for (const p of module.parts) {
     if (p.kind !== "struct") continue;
     if (inherentImplTargets.has(p.name)) continue;
-    const hasDerives = p.attrs.some((a) => a.name === "derive");
-    const hasTraits = (traitImplsByTarget.get(p.name) ?? []).length > 0;
-    const hasFieldConstraints = p.fields.some((f) => f.attrs.length > 0);
-    // A field whose type is another struct declared in the same module
-    // triggers deep validation; the parent needs a `new` to chain into.
-    const hasDeepField = p.fields.some((f) =>
-      structByName.has(f.type.trim())
-    );
-    if (!hasDerives && !hasTraits && !hasFieldConstraints && !hasDeepField) continue;
     syntheticImpls.set(p.name, synthesiseInherentImpl(p));
   }
 
@@ -243,9 +239,22 @@ function emitStruct(s: M.StructDecl): string {
   // structs always export their type — same convention as `impl`. The
   // value identity (a struct = a publicly addressable data shape) only
   // makes sense if other modules can name it.
+  //
+  // Every struct's type carries a hidden `_struct: "<Name>"` brand so
+  // that values from different structs are statically distinguishable
+  // in a union (`type CalcError = BadNumber | DivByZero;`) and match
+  // arms can dispatch by struct name. The brand is populated by
+  // `<Name>.new(…)` and `<Name>.tryNew(…)`; users don't write it
+  // themselves.
   void s.exported;
   const lines: string[] = [];
   lines.push(`export type ${s.name}${s.generics} = {`);
+  // Optional so raw `{ field: value }` literals (e.g. nested-struct
+  // field values passed into a parent's `tryNew`) still typecheck —
+  // the brand is added when the value flows through `<Name>.new` or
+  // `<Name>.tryNew`. Match arms check for the brand's *presence* to
+  // confirm the value really is a constructed Name instance.
+  lines.push(`  readonly _struct?: ${JSON.stringify(s.name)};`);
   for (const f of s.fields) {
     const opt = f.optional ? "?" : "";
     lines.push(`  ${f.name}${opt}: ${f.type};`);
@@ -444,7 +453,8 @@ function renderTryNew(target: string, throwingGuards: readonly string[]): string
     lines.push(g);
   }
   const body = lines.map((l) => `  ${l}`).join("\n");
-  return `tryNew(data: ${target}): Result<${target}, ConstraintError> {\n${body}\n  return Ok(data);\n}`;
+  // Add the `_struct` brand to the returned value, mirroring `new`.
+  return `tryNew(data: Omit<${target}, "_struct">): Result<${target}, ConstraintError> {\n${body}\n  return Ok({ ...data, _struct: ${JSON.stringify(target)} } as ${target});\n}`;
 }
 
 function renderMethod(m: M.ImplMethod, prependGuards: readonly string[]): string {
@@ -655,9 +665,14 @@ function sanitiseTypeKey(typeText: string, fallbackIndex: number): string {
 }
 
 /**
- * Build a minimal `impl Foo { new(data: Foo): Foo { return data; } }`
+ * Build a minimal `impl Foo { new(data) { return { ...data, _struct: "Foo" }; } }`
  * synthetic record so derives / trait impls have a const block to land in
- * even when the user didn't write an explicit inherent impl.
+ * even when the user didn't write an explicit inherent impl. The
+ * branded `_struct` field is what makes `match err { Foo => … }`
+ * dispatch correctly across a union of structs.
+ *
+ * The `data` parameter is typed as `Omit<Foo, "_struct">` — the user
+ * passes the data shape *without* the brand; `new` adds it.
  */
 function synthesiseInherentImpl(s: M.StructDecl): M.ImplDecl {
   return {
@@ -667,10 +682,10 @@ function synthesiseInherentImpl(s: M.StructDecl): M.ImplDecl {
     methods: [
       {
         name: "new",
-        signature: `(data: ${s.name}): ${s.name}`,
-        params: `data: ${s.name}`,
+        signature: `(data: Omit<${s.name}, "_struct">): ${s.name}`,
+        params: `data: Omit<${s.name}, "_struct">`,
         returnType: s.name,
-        body: "{ return data; }",
+        body: `{ return { ...data, _struct: ${JSON.stringify(s.name)} }; }`,
         attrs: [],
         isAsync: false,
         span: { start: s.span.end, end: s.span.end },

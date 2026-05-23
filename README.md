@@ -155,42 +155,42 @@ Same-module struct fields chain automatically (no `#[deep]` needed). Cross-modul
 | `Hash` | `hash(self): string` (stable FNV-1a over the JSON form) |
 | `Event` | side-effect only: emits an `__event_<Name>` descriptor the events assembler harvests |
 
-### `match`
+### `match` + struct unions
 
-`match` pattern-matches on a value. Patterns: literals, identifiers (binding), the wildcard `_`, and object patterns. Each object-pattern entry is either:
-
-- a **check** (`kind: "X"` requires the field equals the literal)
-- a **binding** (`value: v` pulls the field's value into the arm's scope as `v`)
-- a **shorthand binding** (`{ value }` ≡ `{ value: value }`)
-
-Mix them freely. tsb intentionally doesn't ship its own `enum` keyword — TypeScript's `enum` would conflict, and discriminated unions are already the idiomatic shape. Model your sum types as plain union types and match on them directly.
+Every struct's type carries a hidden `readonly _struct?: "<Name>"` brand that `<Name>.new(...)` and `<Name>.tryNew(...)` populate. Match patterns dispatch on the brand by **struct name** — no hand-written `kind` discriminator. The natural way to model "one of N errors" or any sum type:
 
 ```tsb
-type CalcError =
-  | { kind: "BadNumber"; input: string }
-  | { kind: "UnknownOp"; op: string }
-  | { kind: "DivByZero" };
+struct BadNumber { input: string }
+struct UnknownOp { op: string }
+struct DivByZero {}
+
+type CalcError = BadNumber | UnknownOp | DivByZero;
+
+function parse(s: string): Result<number, CalcError> {
+  const n = Number(s);
+  if (Number.isNaN(n)) return Err(BadNumber.new({ input: s }));
+  return Ok(n);
+}
 
 function describe(err: CalcError): string {
   return match err {
-    { kind: "BadNumber", input } => `not a number: ${input}`,
-    { kind: "UnknownOp", op }    => `unknown operator: ${op}`,
-    { kind: "DivByZero" }        => "cannot divide by zero",
-    _                            => "unknown error",
-  };
-}
-
-// Match on Result with payload bindings:
-function explain(r: Result<number, string>): string {
-  return match r {
-    { ok: true, value }  => `ok: ${value}`,
-    { ok: false, error } => `err: ${error}`,
-    _                    => "?",
+    BadNumber { input } => `not a number: ${input}`,
+    UnknownOp { op }    => `unknown operator: ${op}`,
+    DivByZero           => "cannot divide by zero",
   };
 }
 ```
 
+Other pattern forms still work:
+
+- **Literal patterns** for primitives — `"+" => …`, `0 => …`.
+- **Identifier binding** — `x => …` binds the whole scrutinee (camelCase identifiers only; PascalCase is reserved for struct patterns).
+- **Wildcard** — `_ => …`.
+- **Object patterns** for plain discriminated unions and Result — `{ ok: true, value } => …`, `{ ok: false, error: e } => …`. Each entry is a **check** (`key: <literal>`), a **binding** (`key: <ident>`), or a **shorthand binding** (`{ value }` ≡ `{ value: value }`).
+
 Lowers to an IIFE with `if (…) return …;` chains — no runtime support code. Arms must be single expressions; multi-statement bodies should be packed into a helper function.
+
+**Trade-off:** the brand is visible in `JSON.stringify` output. If you don't want it on the wire, either strip it explicitly before sending (`const { _struct: _, ...clean } = value;`) or use the `ToJson` derive (which the next slice will teach to strip the brand).
 
 ### Result + `tryNew`
 

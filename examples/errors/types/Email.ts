@@ -4,18 +4,19 @@ import "../bunny.runtime.ts";
 // errors example uses `tryNew` so bad input doesn't crash.
 
 export type Email = {
+  readonly _struct?: "Email";
   value: string;
 };
 export const Email = {
-  new(data: Email): Email {
+  new(data: Omit<Email, "_struct">): Email {
     if (typeof data.value !== "string") throw new Error("value must be a string");
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.value)) throw new Error("value must be a valid email address");
-   return data; },
+   return { ...data, _struct: "Email" }; },
 
-  tryNew(data: Email): Result<Email, ConstraintError> {
+  tryNew(data: Omit<Email, "_struct">): Result<Email, ConstraintError> {
     if (typeof data.value !== "string") return Err({ field: "value", message: "value must be a string" });
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.value)) return Err({ field: "value", message: "value must be a valid email address" });
-    return Ok(data);
+    return Ok({ ...data, _struct: "Email" } as Email);
   },
 };
 //# sourceMappingURL=Email.ts.map

@@ -2,13 +2,14 @@ import "../bunny.runtime.ts";
 import type { ProductId } from "../types/ProductId.ts";
 
 export type Product = {
+  readonly _struct?: "Product";
   id: ProductId;
   name: string;
   priceCents: number;
   stock: number;
 };
 export const Product = {
-  new(data: Product): Product {
+  new(data: Omit<Product, "_struct">): Product {
     if (typeof data.name !== "string") throw new Error("name must be a string");
     if (data.name.length < 1) throw new Error("name must be at least 1 character");
     if (data.name.length > 200) throw new Error("name must be at most 200 characters");
@@ -16,9 +17,9 @@ export const Product = {
     if (data.priceCents < 0) throw new Error("priceCents must be >= 0");
     if (typeof data.stock !== "number" || Number.isNaN(data.stock)) throw new Error("stock must be a number");
     if (data.stock < 0) throw new Error("stock must be >= 0");
-   return data; },
+   return { ...data, _struct: "Product" }; },
 
-  tryNew(data: Product): Result<Product, ConstraintError> {
+  tryNew(data: Omit<Product, "_struct">): Result<Product, ConstraintError> {
     if (typeof data.name !== "string") return Err({ field: "name", message: "name must be a string" });
     if (data.name.length < 1) return Err({ field: "name", message: "name must be at least 1 character" });
     if (data.name.length > 200) return Err({ field: "name", message: "name must be at most 200 characters" });
@@ -26,7 +27,7 @@ export const Product = {
     if (data.priceCents < 0) return Err({ field: "priceCents", message: "priceCents must be >= 0" });
     if (typeof data.stock !== "number" || Number.isNaN(data.stock)) return Err({ field: "stock", message: "stock must be a number" });
     if (data.stock < 0) return Err({ field: "stock", message: "stock must be >= 0" });
-    return Ok(data);
+    return Ok({ ...data, _struct: "Product" } as Product);
   },
 
   clone(self: Product): Product {

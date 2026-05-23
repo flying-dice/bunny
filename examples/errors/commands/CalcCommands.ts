@@ -9,14 +9,19 @@
 // is structural — Result ok/err, error variants, op selection. No
 // try/catch; every failure mode is a typed value.
 
-import type { CalcError } from "../errors/CalcError.ts";
+import {
+  BadNumber,
+  type CalcError,
+  DivByZero,
+  UnknownOp,
+} from "../errors/CalcError.ts";
 import { Registration } from "../dtos/Registration.ts";
 
 // ---------- parsing helpers -----------------------------------------------
 
 function parseNumber(s: string): Result<number, CalcError> {
   const n = Number(s);
-  if (Number.isNaN(n)) return Err({ kind: "BadNumber", input: s });
+  if (Number.isNaN(n)) return Err(BadNumber.new({ input: s }));
   return Ok(n);
 }
 
@@ -25,8 +30,8 @@ function apply(a: number, op: string, b: number): Result<number, CalcError> {
   if (__m === "+") return Ok(a + b);
   if (__m === "-") return Ok(a - b);
   if (__m === "*") return Ok(a * b);
-  if (__m === "/") return b === 0 ? Err({ kind: "DivByZero" }) : Ok(a / b);
-  return Err({ kind: "UnknownOp", op });
+  if (__m === "/") return b === 0 ? Err(DivByZero.new({})) : Ok(a / b);
+  return Err(UnknownOp.new({ op }));
   throw new Error("match: no arm matched");
 })(op);
 }
@@ -42,16 +47,15 @@ function compute(a: string, op: string, b: string): Result<number, CalcError> {
   return apply(aN.value, op, bN.value);
 }
 
-// Match on the discriminated union. Each arm checks the `kind` tag and
-// binds the variant's payload fields into the arm scope via the
-// `{ field }` shorthand — no need to reach back through the outer
-// `err` to pull values out.
+// Match by struct name. `BadNumber { input }` checks the brand and
+// binds the field — no hand-written `kind` literal anywhere. The arms
+// are exhaustive over the union; the trailing throw inside the
+// lowered IIFE only fires if the type lies at runtime.
 function describe(err: CalcError): string {
   return ((__m) => {
-  if (typeof __m === "object" && __m !== null && (__m as Record<string, unknown>).kind === "BadNumber") { const input = (__m as any).input; return `not a number: ${input}`; }
-  if (typeof __m === "object" && __m !== null && (__m as Record<string, unknown>).kind === "UnknownOp") { const op = (__m as any).op; return `unknown operator: ${op}; supported: + - * /`; }
-  if (typeof __m === "object" && __m !== null && (__m as Record<string, unknown>).kind === "DivByZero") return "cannot divide by zero";
-  return "unknown error";
+  if (typeof __m === "object" && __m !== null && (__m as Record<string, unknown>)._struct === "BadNumber") { const input = (__m as any).input; return `not a number: ${input}`; }
+  if (typeof __m === "object" && __m !== null && (__m as Record<string, unknown>)._struct === "UnknownOp") { const op = (__m as any).op; return `unknown operator: ${op}; supported: + - * /`; }
+  if (typeof __m === "object" && __m !== null && (__m as Record<string, unknown>)._struct === "DivByZero") return "cannot divide by zero";
   throw new Error("match: no arm matched");
 })(err);
 }

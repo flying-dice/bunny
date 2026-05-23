@@ -2,6 +2,7 @@ import "../bunny.runtime.ts";
 import type { Isbn } from "../types/Isbn.ts";
 
 export type Book = {
+  readonly _struct?: "Book";
   id: string;
   isbn: Isbn;
   title: string;
@@ -9,7 +10,7 @@ export type Book = {
   copies: number;
 };
 export const Book = {
-  new(data: Book): Book {
+  new(data: Omit<Book, "_struct">): Book {
     if (typeof data.id !== "string") throw new Error("id must be a string");
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.id)) throw new Error("id must be a valid UUID");
     if (typeof data.title !== "string") throw new Error("title must be a string");
@@ -20,9 +21,9 @@ export const Book = {
     if (data.author.length > 100) throw new Error("author must be at most 100 characters");
     if (typeof data.copies !== "number" || Number.isNaN(data.copies)) throw new Error("copies must be a number");
     if (data.copies < 0) throw new Error("copies must be >= 0");
-   return data; },
+   return { ...data, _struct: "Book" }; },
 
-  tryNew(data: Book): Result<Book, ConstraintError> {
+  tryNew(data: Omit<Book, "_struct">): Result<Book, ConstraintError> {
     if (typeof data.id !== "string") return Err({ field: "id", message: "id must be a string" });
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.id)) return Err({ field: "id", message: "id must be a valid UUID" });
     if (typeof data.title !== "string") return Err({ field: "title", message: "title must be a string" });
@@ -33,7 +34,7 @@ export const Book = {
     if (data.author.length > 100) return Err({ field: "author", message: "author must be at most 100 characters" });
     if (typeof data.copies !== "number" || Number.isNaN(data.copies)) return Err({ field: "copies", message: "copies must be a number" });
     if (data.copies < 0) return Err({ field: "copies", message: "copies must be >= 0" });
-    return Ok(data);
+    return Ok({ ...data, _struct: "Book" } as Book);
   },
 
   clone(self: Book): Book {

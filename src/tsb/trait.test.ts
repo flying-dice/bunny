@@ -30,6 +30,38 @@ test("match supports boolean discriminants and binding side-by-side", async () =
   expect(ts).toContain("(__m as Record<string, unknown>).ok === false");
 });
 
+test("structs auto-inject _struct brand and synthesise new", async () => {
+  const { ts } = await transpile(`
+    struct BadNumber { input: string }
+    struct DivByZero {}
+  `);
+  expect(ts).toContain('readonly _struct?: "BadNumber"');
+  expect(ts).toContain('readonly _struct?: "DivByZero"');
+  expect(ts).toContain(
+    'new(data: Omit<BadNumber, "_struct">): BadNumber { return { ...data, _struct: "BadNumber" }; }'
+  );
+  expect(ts).toContain(
+    'new(data: Omit<DivByZero, "_struct">): DivByZero { return { ...data, _struct: "DivByZero" }; }'
+  );
+});
+
+test("StructName patterns lower to _struct brand checks", async () => {
+  const { ts } = await transpile(`
+    struct BadNumber { input: string }
+    struct DivByZero {}
+    type E = BadNumber | DivByZero;
+    export function describe(err: E): string {
+      return match err {
+        BadNumber { input } => input,
+        DivByZero => "zero",
+      };
+    }
+  `);
+  expect(ts).toContain('(__m as Record<string, unknown>)._struct === "BadNumber"');
+  expect(ts).toContain("const input = (__m as any).input");
+  expect(ts).toContain('(__m as Record<string, unknown>)._struct === "DivByZero"');
+});
+
 test("{ field } shorthand binds a same-named local in the arm body", async () => {
   const { ts } = await transpile(`
     type E = { kind: "Hit"; value: number } | { kind: "Miss" };

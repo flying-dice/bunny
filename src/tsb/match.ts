@@ -147,7 +147,16 @@ type Pattern =
    *   { kind: "Bye" }              → discriminant-only
    *   { value }                    → shorthand bind (≡ { value: value })
    */
-  | { kind: "object"; entries: ObjectPatternEntry[] };
+  | { kind: "object"; entries: ObjectPatternEntry[] }
+  /**
+   * Struct pattern. Matches when the scrutinee carries the named
+   * struct's brand (`_struct === "<Name>"`). Optionally binds fields:
+   *
+   *   BadNumber              → check brand only
+   *   BadNumber { input }    → check brand + bind `input`
+   *   DivByZero { }          → check brand only (explicit empty body)
+   */
+  | { kind: "struct"; structName: string; entries: ObjectPatternEntry[] };
 
 type ObjectPatternEntry =
   | { type: "check"; key: string; valueText: string }
@@ -215,6 +224,43 @@ function parsePattern(
   if (/^-?\d/.test(trimmed)) {
     return { kind: "literal", text: trimmed };
   }
+  // Struct pattern: `StructName` (brand-only) or `StructName { … }`.
+  // PascalCase-leading identifiers are reserved for struct patterns
+  // because tsb auto-brands every struct with `_struct: "<Name>"`.
+  // (camelCase identifiers stay as the `identifier` binding form.)
+  const structMatch = trimmed.match(/^([A-Z][A-Za-z0-9_]*)(\s*\{[\s\S]*\})?$/);
+  if (structMatch) {
+    const [, structName, bodyText] = structMatch;
+    if (!bodyText) {
+      return { kind: "struct", structName: structName!, entries: [] };
+    }
+    const inner = bodyText.trim().slice(1, -1).trim();
+    if (inner.length === 0) {
+      return { kind: "struct", structName: structName!, entries: [] };
+    }
+    const entries: ObjectPatternEntry[] = [];
+    for (const part of splitTopLevelCommas(inner)) {
+      const literalMatch = part.match(
+        /^\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*:\s*(true|false|null|undefined|-?\d+(?:\.\d+)?|"[^"]*"|'[^']*')\s*$/
+      );
+      if (literalMatch) {
+        entries.push({ type: "check", key: literalMatch[1]!, valueText: literalMatch[2]! });
+        continue;
+      }
+      const bindMatch = part.match(/^\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*:\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*$/);
+      if (bindMatch) {
+        entries.push({ type: "bind", key: bindMatch[1]!, binding: bindMatch[2]! });
+        continue;
+      }
+      const shorthandMatch = part.match(/^\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*$/);
+      if (shorthandMatch) {
+        entries.push({ type: "bind", key: shorthandMatch[1]!, binding: shorthandMatch[1]! });
+        continue;
+      }
+      return undefined;
+    }
+    return { kind: "struct", structName: structName!, entries };
+  }
   if (trimmed.startsWith("{")) {
     // Parse one or more `<key>: <literal-or-ident>` entries. A literal
     // value is a runtime check; an identifier is a binding that pulls
@@ -266,11 +312,18 @@ function renderLowered(scrutinee: string, arms: readonly Arm[]): string {
         lines.push(`  { const ${arm.pattern.name} = __m; return ${arm.resultText}; }`);
         break;
       }
-      case "object": {
-        const entries = arm.pattern.entries;
+      case "object":
+      case "struct": {
+        const pattern = arm.pattern;
+        const entries = pattern.entries;
         const checks = entries.filter((e) => e.type === "check");
         const binds = entries.filter((e) => e.type === "bind");
         const guards: string[] = [];
+        if (pattern.kind === "struct") {
+          guards.push(
+            `(__m as Record<string, unknown>)._struct === ${JSON.stringify(pattern.structName)}`
+          );
+        }
         for (const c of checks) {
           guards.push(
             `(__m as Record<string, unknown>).${c.key} === ${c.valueText}`

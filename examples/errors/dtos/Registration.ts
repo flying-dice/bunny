@@ -10,23 +10,24 @@ import { Username } from "../types/Username.ts";
 // message verbatim or dispatch on `field`.
 
 export type Registration = {
+  readonly _struct?: "Registration";
   email: Email;
   username: Username;
 };
 export const Registration = {
-  new(data: Registration): Registration {
+  new(data: Omit<Registration, "_struct">): Registration {
     data.email = Email.new(data.email);
     data.username = Username.new(data.username);
-   return data; },
+   return { ...data, _struct: "Registration" }; },
 
-  tryNew(data: Registration): Result<Registration, ConstraintError> {
+  tryNew(data: Omit<Registration, "_struct">): Result<Registration, ConstraintError> {
     const __r_email = Email.tryNew(data.email);
     if (!__r_email.ok) return __r_email;
     data.email = __r_email.value;
     const __r_username = Username.tryNew(data.username);
     if (!__r_username.ok) return __r_username;
     data.username = __r_username.value;
-    return Ok(data);
+    return Ok({ ...data, _struct: "Registration" } as Registration);
   },
 };
 //# sourceMappingURL=Registration.ts.map

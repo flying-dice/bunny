@@ -18,7 +18,7 @@ test("tryNew emitted and usesResult flag set when constraints exist", async () =
     }
   `);
   expect(usesResult).toBe(true);
-  expect(ts).toContain("tryNew(data: Foo): Result<Foo, ConstraintError>");
+  expect(ts).toContain(`tryNew(data: Omit<Foo, "_struct">): Result<Foo, ConstraintError>`);
   expect(ts).toContain('return Err({ field: "name"');
   // The shared bunny.d.ts/bunny.runtime.ts provide Result/Ok/Err
   // ambiently; the compiled .ts no longer carries an inlined prelude.
