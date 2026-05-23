@@ -74,6 +74,19 @@ interface WorkspaceSymbol {
    * in the hover popup and completion preview.
    */
   doc?: string;
+  /**
+   * For trait declarations: the method signatures clients need to
+   * implement. Used to seed `impl Trait for X {}` completions.
+   */
+  traitMethods?: TraitMethodSig[];
+}
+
+interface TraitMethodSig {
+  name: string;
+  signature: string;
+  hasDefault: boolean;
+  isAsync: boolean;
+  doc?: string;
 }
 
 /** Run the LSP. Resolves when the client closes stdin. */
@@ -234,6 +247,7 @@ async function harvestSymbols(
     const key = `${part.kind}:${part.name}`;
     const detail = describePart(part);
     const doc = extractDocBefore(text, part.span.start);
+    const traitMethods = part.kind === "trait" ? collectTraitMethodSigs(part, text) : undefined;
     out.set(key, {
       name: part.name,
       kind: part.kind,
@@ -241,8 +255,19 @@ async function harvestSymbols(
       range,
       detail,
       doc,
+      traitMethods,
     });
   }
+}
+
+function collectTraitMethodSigs(trait: M.TraitDecl, text: string): TraitMethodSig[] {
+  return trait.methods.map((m) => ({
+    name: m.name,
+    signature: m.signature,
+    hasDefault: m.body !== undefined,
+    isAsync: m.isAsync,
+    doc: extractDocBefore(text, m.span.start),
+  }));
 }
 
 // Walk backward from `beforeIndex` collecting a contiguous Rust-style
@@ -358,8 +383,15 @@ interface CompletionItem {
   kind: number;
   detail?: string;
   insertText?: string;
+  /** LSP `InsertTextFormat`: 1 = plain text (default), 2 = snippet. */
+  insertTextFormat?: 1 | 2;
   /** Markdown body. Zed shows this in the completion preview pane. */
   documentation?: { kind: "markdown"; value: string };
+  /**
+   * Sort priority. Lower sorts first. Used to surface trait-method
+   * stubs above generic keyword/symbol noise.
+   */
+  sortText?: string;
 }
 
 function completionsAt(
@@ -370,6 +402,14 @@ function completionsAt(
   const offset = positionToOffset(doc.text, pos);
   const before = doc.text.slice(0, offset);
   const items: CompletionItem[] = [];
+
+  // Inside a `impl Trait for X { … }` body, between methods: suggest
+  // one stub per trait method that hasn't been implemented yet. These
+  // sort first; general completions still follow underneath.
+  const implCtx = findImplBodyContext(doc, offset);
+  if (implCtx) {
+    addTraitMethodStubs(implCtx, doc, workspace, items);
+  }
 
   // Inside `#[derive(…)]`: suggest derive names.
   if (/#\[derive\([^)]*$/.test(before)) {
@@ -411,6 +451,112 @@ function completionsAt(
     }
   }
   return { isIncomplete: false, items };
+}
+
+interface ImplBodyContext {
+  /** The impl declaration the cursor sits inside. */
+  impl: M.ImplDecl;
+  /** Names of methods already present in the impl block. */
+  implemented: Set<string>;
+}
+
+// Cursor is inside an `impl Trait for X { … }` body, between methods
+// (not inside a method body). Returns the impl + already-implemented
+// method names, or undefined when the cursor isn't at that position.
+function findImplBodyContext(doc: DocState, offset: number): ImplBodyContext | undefined {
+  if (!doc.module) return undefined;
+  for (const part of doc.module.parts) {
+    if (part.kind !== "impl") continue;
+    if (!part.traitName) continue;
+    if (offset < part.span.start || offset > part.span.end) continue;
+    // Must be past the opening `{`. Find it: the first `{` after the
+    // declaration head in the source text.
+    const head = doc.text.slice(part.span.start, part.span.end);
+    const braceRel = head.indexOf("{");
+    if (braceRel < 0) continue;
+    if (offset <= part.span.start + braceRel) continue;
+    // Must NOT be inside any method body.
+    let insideMethod = false;
+    for (const m of part.methods) {
+      if (offset >= m.span.start && offset <= m.span.end) {
+        insideMethod = true;
+        break;
+      }
+    }
+    if (insideMethod) continue;
+    return {
+      impl: part,
+      implemented: new Set(part.methods.map((m) => m.name)),
+    };
+  }
+  return undefined;
+}
+
+function addTraitMethodStubs(
+  ctx: ImplBodyContext,
+  doc: DocState,
+  workspace: ReadonlyMap<string, WorkspaceSymbol>,
+  items: CompletionItem[],
+): void {
+  const traitName = ctx.impl.traitName!;
+  const methods = resolveTraitMethods(traitName, doc, workspace);
+  if (!methods) return;
+  const structName = ctx.impl.name;
+  let order = 0;
+  for (const m of methods) {
+    if (ctx.implemented.has(m.name)) continue;
+    items.push(traitMethodStub(m, structName, order++));
+  }
+}
+
+function resolveTraitMethods(
+  name: string,
+  doc: DocState,
+  workspace: ReadonlyMap<string, WorkspaceSymbol>,
+): TraitMethodSig[] | undefined {
+  if (doc.module) {
+    for (const part of doc.module.parts) {
+      if (part.kind === "trait" && part.name === name) {
+        return collectTraitMethodSigs(part, doc.text);
+      }
+    }
+  }
+  const sym = workspace.get(`trait:${name}`);
+  return sym?.traitMethods;
+}
+
+function traitMethodStub(
+  m: TraitMethodSig,
+  structName: string,
+  sortOrder: number,
+): CompletionItem {
+  const sig = m.signature.replace(/\bSelf\b/g, structName);
+  const asyncPrefix = m.isAsync ? "async " : "";
+  const insertText = `${asyncPrefix}${m.name}${sig} {\n  $0\n}`;
+  const status = m.hasDefault ? "default — override" : "required";
+  const docLines: string[] = [];
+  docLines.push("```tsb");
+  docLines.push(`${asyncPrefix}${m.name}${sig}`);
+  docLines.push("```");
+  docLines.push("");
+  docLines.push(m.hasDefault
+    ? "Trait method with a default body — override here to specialise."
+    : "Required trait method — must be implemented.");
+  if (m.doc) {
+    docLines.push("");
+    docLines.push(m.doc);
+  }
+  return {
+    label: m.name,
+    kind: 2 /* Method */,
+    detail: `${m.name}${sig}  (${status})`,
+    insertText,
+    insertTextFormat: 2 /* Snippet */,
+    documentation: { kind: "markdown", value: docLines.join("\n") },
+    // Required methods sort first, defaults after, all before generic
+    // completions.
+    sortText: `0_${m.hasDefault ? "1" : "0"}_${String(sortOrder).padStart(3, "0")}_${m.name}`,
+  };
 }
 
 function symbolToCompletion(sym: WorkspaceSymbol): CompletionItem {
