@@ -10,6 +10,7 @@
  */
 import * as M from "../ast/index.ts";
 import type * as N from "../ast/nodes.generated.ts";
+import { lowerBody } from "./lower-match.ts";
 import { parseToAst } from "./tree-sitter.ts";
 
 export async function parseViaTreeSitter(source: string): Promise<M.ParseResult> {
@@ -199,8 +200,6 @@ function convertImplMethod(node: N.ImplMethodNode): M.ImplMethod {
       attrs.push(...convertAttributes(c as N.AttributeNode));
     }
   }
-  // Legacy `signature` runs from the opening paren of params through the
-  // end of the return type — reconstruct it from the parameters + return.
   const params = stripParens(node.parameters.text);
   const returnType = node.return_type?.text ?? "";
   const signature = returnType
@@ -211,7 +210,7 @@ function convertImplMethod(node: N.ImplMethodNode): M.ImplMethod {
     signature,
     params,
     returnType,
-    body: node.body.text,
+    body: lowerBody(node.body, node.body.text),
     attrs,
     isAsync: node.text.startsWith("async"),
     span: { start: node.startIndex, end: node.endIndex },
@@ -249,7 +248,7 @@ function convertTraitMethod(node: N.TraitMethodNode): M.TraitMethod {
     signature,
     params,
     returnType,
-    body: node.body?.text,
+    body: node.body ? lowerBody(node.body, node.body.text) : undefined,
     attrs: [],
     isAsync: node.text.startsWith("async"),
     span: { start: node.startIndex, end: node.endIndex },
@@ -272,7 +271,7 @@ function convertFunction(
     signature,
     params,
     returnType,
-    body: node.body.text,
+    body: lowerBody(node.body, node.body.text),
     attrs: pendingAttrs,
     isAsync: node.text.includes("async"),
     span: { start: node.startIndex, end: node.endIndex },

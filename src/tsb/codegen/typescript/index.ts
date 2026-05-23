@@ -28,7 +28,6 @@
 
 import * as M from "../../ast/index.ts";
 import { type MacroContext, MacroRegistry } from "../../macros/registry.ts";
-import { lowerMatchExpressions } from "../match.ts";
 
 export interface EmitChunk {
   text: string;
@@ -162,7 +161,7 @@ export function emit(
         // transform — lower it inside arbitrary user code (free
         // functions, top-level statements) as well as in
         // bunny-parsed declarations.
-        push(lowerMatchExpressions(part.text), part.span.start);
+        push(part.text, part.span.start);
         break;
       case "struct": {
         push(emitStruct(part), part.span.start);
@@ -469,7 +468,7 @@ function renderTryNew(target: string, throwingGuards: readonly string[]): string
 
 function renderMethod(m: M.ImplMethod, prependGuards: readonly string[]): string {
   const async = m.isAsync ? "async " : "";
-  const loweredBody = lowerMatchExpressions(m.body);
+  const loweredBody = m.body;
   if (prependGuards.length === 0) {
     return `${async}${m.name}${m.signature} ${loweredBody}`;
   }
@@ -709,7 +708,7 @@ function synthesiseInherentImpl(s: M.StructDecl): M.ImplDecl {
 function renderFunctionVerbatim(fn: M.FunctionDecl): string {
   const prefix = fn.exported ? "export " : "";
   const async = fn.isAsync ? "async " : "";
-  const body = lowerMatchExpressions(fn.body);
+  const body = fn.body;
   return `${prefix}${async}function ${fn.name}${fn.signature} ${body}`;
 }
 
