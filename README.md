@@ -175,6 +175,47 @@ export function announce(e: Event): string {
 
 Lowers to an IIFE with `if (…) return …;` chains — no runtime support code needed.
 
+### Result + `tryNew`
+
+Every struct with constraints (or whose nested fields have constraints) emits **two** factory methods side-by-side:
+
+- `Foo.new(data): Foo` — throws on the first violation. Backwards-compatible, useful when failure is genuinely exceptional.
+- `Foo.tryNew(data): Result<Foo, ConstraintError>` — returns `Err({ field, message })` on the first violation. Pattern-match the Result instead of wrapping in try/catch.
+
+```tsb
+struct AddBookDto {
+  #[deep]
+  isbn: Isbn,
+  #[minLength(1), maxLength(200)]
+  title: string,
+}
+
+#[command("add", "Add a book")]
+export function addBook(rawIsbn: string, title: string): void {
+  const parsed = AddBookDto.tryNew({ isbn: { value: rawIsbn }, title });
+  if (!parsed.ok) {
+    console.error(`${parsed.error.field}: ${parsed.error.message}`);
+    process.exit(2);
+  }
+  // parsed.value is the validated AddBookDto.
+}
+```
+
+`tryNew` chains: a deep-validated field calls the inner struct's `tryNew` and propagates the `Err` upward. The error preserves the *innermost* field name + message so the caller sees exactly which constraint failed.
+
+When any compiled `.ts` uses Result, bunny prepends a self-contained ~25-line prelude defining the type and helpers (`Ok`, `Err`, `isOk`, `isErr`, `unwrap`, `unwrapOr`, `mapResult`, `mapErr`, `andThen`). No runtime dependency on bunny.
+
+```ts
+// Auto-injected at the top of every compiled .ts that uses Result:
+export type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
+export type ConstraintError = { field: string; message: string };
+export function Ok<T>(value: T): Result<T, never> { return { ok: true, value }; }
+export function Err<E>(error: E): Result<never, E> { return { ok: false, error }; }
+// + isOk, isErr, unwrap, unwrapOr, mapResult, mapErr, andThen
+```
+
+The `?` postfix operator (Rust's early-return shorthand) isn't supported yet — propagate manually with `if (!r.ok) return r;`.
+
 ### Traits
 
 Declare a contract once; implement it for many structs. The trait body lists method signatures (required) and default methods with `{}` bodies (inherited unless overridden).

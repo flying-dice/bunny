@@ -57,6 +57,11 @@ export function emit(
     chunks.push({ text, sourceOffset });
   };
   let moduleAppend = "";
+  // Flips to true the first time the emitter synthesises code that
+  // references `Result` / `Ok` / `Err` / `ConstraintError`. When set, the
+  // module gets a self-contained prelude defining those types and
+  // helpers — no runtime dependency on bunny.
+  const state = { usesResult: false };
   // Records collected by macros via `ctx.appendToRecord`. Emitted as
   // `export const <name> = { ... }` after every part has been processed.
   const records = new Map<
@@ -127,7 +132,12 @@ export function emit(
     const hasDerives = p.attrs.some((a) => a.name === "derive");
     const hasTraits = (traitImplsByTarget.get(p.name) ?? []).length > 0;
     const hasFieldConstraints = p.fields.some((f) => f.attrs.length > 0);
-    if (!hasDerives && !hasTraits && !hasFieldConstraints) continue;
+    // A field whose type is another struct declared in the same module
+    // triggers deep validation; the parent needs a `new` to chain into.
+    const hasDeepField = p.fields.some((f) =>
+      structByName.has(f.type.trim())
+    );
+    if (!hasDerives && !hasTraits && !hasFieldConstraints && !hasDeepField) continue;
     syntheticImpls.set(p.name, synthesiseInherentImpl(p));
   }
 
@@ -142,7 +152,7 @@ export function emit(
         if (synth) {
           push("\n", part.span.start);
           push(
-            emitImpl(synth, part, traitImplsByTarget.get(part.name) ?? [], registry, ctx, traitByName),
+            emitImpl(synth, part, traitImplsByTarget.get(part.name) ?? [], registry, ctx, traitByName, state),
             part.span.start
           );
         }
@@ -151,7 +161,7 @@ export function emit(
       case "impl":
         if (part.traitName) break;
         push(
-          emitImpl(part, structByName.get(part.name), traitImplsByTarget.get(part.name) ?? [], registry, ctx, traitByName),
+          emitImpl(part, structByName.get(part.name), traitImplsByTarget.get(part.name) ?? [], registry, ctx, traitByName, state),
           part.span.start
         );
         break;
@@ -186,9 +196,43 @@ export function emit(
     push(`\nexport const ${name} = {\n${entries.join(",\n")},\n};\n`);
   }
 
-  const ts = chunks.map((c) => c.text).join("");
+  let ts = chunks.map((c) => c.text).join("");
+  if (state.usesResult) {
+    ts = RESULT_PRELUDE + ts;
+    // Insert the prelude as a synthetic chunk so source maps still
+    // line up with the original .tsb byte offsets.
+    chunks.unshift({ text: RESULT_PRELUDE });
+  }
   return { ts, diagnostics, chunks };
 }
+
+/**
+ * Self-contained Result/Ok/Err helpers prepended to any compiled `.ts`
+ * that uses them. Plain TypeScript — no runtime dependency on bunny.
+ */
+const RESULT_PRELUDE = `// --- bunny: Result runtime (auto-injected) ---
+export type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
+export type ConstraintError = { field: string; message: string };
+export function Ok<T>(value: T): Result<T, never> { return { ok: true, value }; }
+export function Err<E>(error: E): Result<never, E> { return { ok: false, error }; }
+export function isOk<T, E>(r: Result<T, E>): r is { ok: true; value: T } { return r.ok; }
+export function isErr<T, E>(r: Result<T, E>): r is { ok: false; error: E } { return !r.ok; }
+export function unwrap<T, E>(r: Result<T, E>): T {
+  if (r.ok) return r.value;
+  throw new Error(typeof r.error === "string" ? r.error : JSON.stringify(r.error));
+}
+export function unwrapOr<T, E>(r: Result<T, E>, fallback: T): T { return r.ok ? r.value : fallback; }
+export function mapResult<T, U, E>(r: Result<T, E>, fn: (value: T) => U): Result<U, E> {
+  return r.ok ? Ok(fn(r.value)) : r;
+}
+export function mapErr<T, E, F>(r: Result<T, E>, fn: (error: E) => F): Result<T, F> {
+  return r.ok ? r : Err(fn(r.error));
+}
+export function andThen<T, U, E>(r: Result<T, E>, fn: (value: T) => Result<U, E>): Result<U, E> {
+  return r.ok ? fn(r.value) : r;
+}
+// --- end Result runtime ---
+`;
 
 // ----------------------------------------------------------------------------
 // struct → type
@@ -242,7 +286,8 @@ function emitImpl(
   traitImpls: readonly M.ImplDecl[],
   registry: MacroRegistry,
   ctx: MacroContext,
-  traitByName: ReadonlyMap<string, M.TraitDecl>
+  traitByName: ReadonlyMap<string, M.TraitDecl>,
+  state: { usesResult: boolean }
 ): string {
   // impl blocks are always exported — the whole point is to expose the
   // struct's methods to importers. Module-private impls don't carry their
@@ -262,6 +307,14 @@ function emitImpl(
   const methodTexts: string[] = [];
   for (const m of impl.methods) {
     methodTexts.push(renderMethod(m, m.name === "new" ? guardLines : []));
+  }
+  // `tryNew(data) -> Result<Foo, ConstraintError>` — same guards as `new`,
+  // but each violation returns `Err(...)` instead of throwing. Only
+  // emitted when the struct actually has constraint guards, so structs
+  // without validation don't gain a redundant tryNew.
+  if (guardLines.length > 0 && impl.methods.some((m) => m.name === "new")) {
+    state.usesResult = true;
+    methodTexts.push(renderTryNew(impl.name, guardLines));
   }
   for (const d of derivedMethods) {
     // Empty string means the derive only side-effected (e.g. an Event
@@ -353,6 +406,67 @@ function renderTraitDefault(m: M.TraitMethod, targetName: string): string {
   const signature = m.signature.replace(/\bSelf\b/g, targetName);
   const body = (m.body ?? "").replace(/\bSelf\b/g, targetName);
   return `${async}${m.name}${signature} ${body}`;
+}
+
+/**
+ * Build a Result-returning constructor that mirrors `new(data)` but
+ * surfaces every constraint failure as `Err(ConstraintError)` instead
+ * of throwing. The throwing-form guards are rewritten line-by-line:
+ *
+ *   if (cond) throw new Error("name must be ...");
+ *   →
+ *   if (cond) return Err({ field: "name", message: "name must be ..." });
+ *
+ * The convention every built-in constraint macro follows is that the
+ * error message starts with the field name, which we use as the
+ * `ConstraintError.field` value.
+ */
+function renderTryNew(target: string, throwingGuards: readonly string[]): string {
+  const lines: string[] = [];
+  for (const g of throwingGuards) {
+    // Pattern 1 — throwing constraint:
+    //   if (<cond>) throw new Error("name must be ...");
+    const guardMatch = g.match(/^if \((.*)\) throw new Error\("([^ ]+)([^"]*)"\);$/);
+    if (guardMatch) {
+      const [, cond, field, rest] = guardMatch;
+      const message = `${field}${rest}`;
+      lines.push(
+        `if (${cond}) return Err({ field: ${JSON.stringify(field)}, message: ${JSON.stringify(message)} });`
+      );
+      continue;
+    }
+    // Pattern 2 — deep validation (mandatory field):
+    //   data.<f> = <T>.new(data.<f>);
+    const deepMatch = g.match(/^data\.(\w+) = (\w+)\.new\(data\.\1\);$/);
+    if (deepMatch) {
+      const [, field, type] = deepMatch;
+      const v = `__r_${field}`;
+      lines.push(`const ${v} = ${type}.tryNew(data.${field});`);
+      lines.push(`if (!${v}.ok) return ${v};`);
+      lines.push(`data.${field} = ${v}.value;`);
+      continue;
+    }
+    // Pattern 3 — deep validation (optional field):
+    //   if (data.<f> !== undefined) data.<f> = <T>.new(data.<f>);
+    const deepOptMatch = g.match(
+      /^if \(data\.(\w+) !== undefined\) data\.\1 = (\w+)\.new\(data\.\1\);$/
+    );
+    if (deepOptMatch) {
+      const [, field, type] = deepOptMatch;
+      const v = `__r_${field}`;
+      lines.push(`if (data.${field} !== undefined) {`);
+      lines.push(`  const ${v} = ${type}.tryNew(data.${field});`);
+      lines.push(`  if (!${v}.ok) return ${v};`);
+      lines.push(`  data.${field} = ${v}.value;`);
+      lines.push(`}`);
+      continue;
+    }
+    // Unknown guard shape — pass through verbatim; the user can still
+    // rely on the throwing fallback inside their tryNew body.
+    lines.push(g);
+  }
+  const body = lines.map((l) => `  ${l}`).join("\n");
+  return `tryNew(data: ${target}): Result<${target}, ConstraintError> {\n${body}\n  return Ok(data);\n}`;
 }
 
 function renderMethod(m: M.ImplMethod, prependGuards: readonly string[]): string {

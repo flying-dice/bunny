@@ -4,15 +4,21 @@ import * as books from "../services/BookService.ts";
 
 #[command("add", "Add a book to the library")]
 export function addBook(isbn: string, title: string, author: string, copies: number): void {
-  // `#[deep]` on AddBookDto's `isbn` field chains through Isbn.new — so
-  // we just pass the raw shape and trust AddBookDto.new to validate it.
-  const dto = AddBookDto.new({
+  // `AddBookDto.tryNew` returns a `Result<AddBookDto, ConstraintError>`
+  // instead of throwing — and chains through `Isbn.tryNew` for the
+  // deep-validated `isbn` field. Pattern-match the Result rather than
+  // wrapping the call in try/catch.
+  const parsed = AddBookDto.tryNew({
     isbn: { value: isbn },
     title,
     author,
     copies,
   });
-  const book = books.addBook(dto);
+  if (!parsed.ok) {
+    console.error(`invalid input: ${parsed.error.field} — ${parsed.error.message}`);
+    process.exit(2);
+  }
+  const book = books.addBook(parsed.value);
   console.log(`added ${book.id}  ${book.title} — ${book.author}  (${book.copies} copies)`);
 }
 
