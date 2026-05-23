@@ -1,17 +1,17 @@
 # Zed extension — neoc
 
-Language support for `.neoc` files in [Zed](https://zed.dev). Boots `neoc lsp` as the language server, giving you diagnostics, completion, hover, and goto-definition.
+Language support for `.neoc` files in [Zed](https://zed.dev). Boots `neoc lsp` as the language server, giving you diagnostics, completion, hover, goto-definition, and a quick-fix that stubs missing trait methods.
 
 ## Install as a dev extension
 
 Until this ships to Zed's extension registry, install it as a local dev extension:
 
 1. (Optional but cleanest) From the repo root, run `bun link` once. That puts `neoc` on `$PATH`, so the extension launches `neoc lsp` directly instead of falling back to `bun run src/cli.ts lsp`.
-2. Materialise the local grammar fork:
+2. Build the tree-sitter grammar:
    ```bash
    ./zed/setup-grammar.sh
    ```
-   This fetches `tree-sitter-typescript` at a pinned commit, renames it internally to `neoc`, and stores it as a self-contained git repo under `zed/grammars-src/neoc/` (gitignored). The Zed extension references it via `file://` so it can't collide with the editor's built-in TypeScript grammar.
+   Runs `tree-sitter generate` + `tree-sitter build --wasm` against the from-scratch grammar in `zed/tree-sitter-neoc/`, leaves the parser source as a self-contained git repo so Zed can clone it via `file://`.
 3. Open Zed.
 4. Open the command palette (`cmd-shift-p`) → **zed: install dev extension**.
 5. Pick the `zed/` directory of this repo.
@@ -30,25 +30,7 @@ Editing `languages/neoc/highlights.scm` and round-tripping through `zed: install
 
 The script runs `tree-sitter query` against a neoc fixture and asserts that specific tokens land in specific captures. Edit the `EXPECTED` block at the top of the script to add new assertions; failures print the actual captures for the offending position.
 
-**One-time setup:** the `setup-grammar.sh` step also has to have been run (the test uses the same vendored grammar Zed does). Tree-sitter's `query` subcommand resolves the grammar from its current working directory, so the script `cd`s into the parser dir before each query call.
-
-### Grammar history (why we vendor)
-
-Four versions of the grammar story landed before `v0.5.0` settled it:
-
-- **`v0.1.0`** — declared `[grammars.typescript]`. Same name as Zed's built-in TS grammar; collision broke `.ts` highlighting editor-wide.
-- **`v0.2.0`** — renamed to `[grammars.neoc]`. Tree-sitter's compiler expects the parser's exported C symbol (`tree_sitter_<name>`) to match, but the upstream source exports `tree_sitter_typescript`. Install errored with `failed to compile grammar 'neoc'`.
-- **`v0.3.0`** — dropped the grammar entirely. Safe; `.neoc` files rendered as plain text.
-- **`v0.4.0`** — tried `grammar = "typescript"` in the language config without redeclaring it. Zed's built-in grammar isn't reachable from other extensions; no highlighting.
-- **`v0.5.0`** — vendor a renamed fork locally (`zed/setup-grammar.sh`). Real highlighting via the renamed `tree_sitter_neoc` symbol; can't collide with built-in.
-
-### Recovering from a broken v0.1.0 / v0.2.0 install
-
-1. Open the extensions panel (`cmd-shift-x` / **zed: extensions**).
-2. Uninstall the `neoc` extension.
-3. Quit Zed and reopen (drops any cached grammar state).
-4. Run `./zed/setup-grammar.sh` if you haven't already.
-5. Re-install via **zed: install dev extension** pointing at this `zed/` directory.
+**One-time setup:** the `setup-grammar.sh` step also has to have been run (the test uses the same grammar Zed does). Tree-sitter's `query` subcommand resolves the grammar from its current working directory, so the script `cd`s into the parser dir before each query call.
 
 ## How the LSP gets launched
 
@@ -61,9 +43,10 @@ If neither is available the LSP fails to start; Zed surfaces the error in its lo
 
 ## What you get
 
-- Diagnostics from the neoc parser + emitter (red squiggles on errors).
-- Completion in `#[derive(...)]`, `#[...]` attribute slots, and after `impl … for`.
-- Hover on built-in macros, structs, and functions.
-- Goto-definition for struct / impl / function references in the current file.
+- Diagnostics from the neoc parser + emitter.
+- Completion in `#[derive(...)]`, `#[...]` attribute slots, after `impl … for`, and after `self.` / `Self.` / `<param>.` for struct field access.
+- Hover on built-in macros, structs, traits, and functions.
+- Goto-definition for struct / trait / function references in the current file or workspace.
+- A `quickfix` code action that stubs every missing required method on an `impl Trait for X { }` block.
 
-Highlighting reuses the TypeScript tree-sitter grammar, so `struct`/`impl`/`match`/`#[…]` won't be syntax-highlighted as keywords. The rest of the file (which is TS-compatible) highlights correctly.
+Syntax highlighting comes from a from-scratch `tree-sitter-neoc` grammar that lives under `zed/tree-sitter-neoc/`. It knows about `struct`, `impl`, `trait`, `match`, `#[…]`, `Self`, and the rest of the declaration surface; method bodies and the gaps between declarations are treated as opaque text (where the user writes Lua).

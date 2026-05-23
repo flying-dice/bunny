@@ -8,7 +8,7 @@
  * else is `OpaqueText` and forwards verbatim to the output.
  *
  * Today method and function *bodies* are stored as opaque text — fine
- * for the TypeScript codegen (the body passes through after match
+ * for the Lua codegen (the body passes through after match
  * lowering and macro injection) but a future codegen for another
  * target (Go, Rust, …) will need a richer expression / statement
  * AST. The shape below is the migration target: extend each
@@ -44,7 +44,7 @@ export interface OpaqueText {
 
 export interface StructField {
   name: string;
-  /** Verbatim TS text for the field's declared type. */
+  /** Verbatim text for the field's declared type. */
   type: string;
   optional: boolean;
   attrs: Attr[];

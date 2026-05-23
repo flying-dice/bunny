@@ -8,7 +8,7 @@
     <p>
       Syntax highlighting, completion, hover, diagnostics, and quick-fixes
       for <a href="https://github.com/flying-dice/neoc-compiler">neoc</a> — a
-      Rust-flavoured TypeScript dialect.
+      Rust-flavoured Lua dialect.
     </p>
     <p>
       Semantic features come from the neoc LSP server. Install neoc so

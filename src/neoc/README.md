@@ -1,14 +1,13 @@
 # `src/neoc/` — language architecture
 
-The neoc language splits into four modules with clean boundaries.
+The neoc compiler splits into four modules with clean boundaries.
 
 ```
 zed/tree-sitter-neoc/             1. grammar (editor + tooling)
 src/neoc/ast/                     2. AST — typed node definitions
 src/neoc/parser/                  3. source text → AST
-src/neoc/codegen/typescript/      4. AST → TypeScript
-src/neoc/codegen/<future>/           AST → Go / Rust / Python / …
-src/neoc/macros/                  macro system, shared across codegens
+src/neoc/codegen/lua/             4. AST → Lua 5.4
+src/neoc/macros/                  macro system, owned by codegen
 src/neoc/compiler.ts              orchestrator (parse → macros → codegen)
 src/neoc/driver.ts                fs entry points (compileFile, buildProject)
 src/neoc/lsp.ts                   stdio language server
@@ -16,13 +15,13 @@ src/neoc/lsp.ts                   stdio language server
 
 ## Module boundaries
 
-**`ast/`** owns the AST type definitions. No logic, no string manipulation — just shapes. The current `Module` / `ModulePart` model has opaque text for method/function bodies. Cross-language codegens will require richer expression / statement nodes; the path forward is to extend these types and teach the parser to populate them. Today's AST is enough for TypeScript codegen because the body text passes through to the target almost verbatim (after match lowering + macro injection).
+**`ast/`** owns the AST type definitions. No logic, no string manipulation — just shapes. The `Module` / `ModulePart` model carries method / function bodies as opaque Lua text. The codegen weaves macro output and match lowerings into those bodies; the user writes plain Lua in the gaps.
 
-**`parser/`** turns source text into AST. Depends on `ast/` and its own `scanner.ts`. Knows nothing about codegen. The same parser drives every downstream consumer: codegens, the LSP, future analysers.
+**`parser/`** turns source text into AST via tree-sitter. Knows nothing about codegen. The same parser drives the codegen, the LSP, and future analysers.
 
-**`codegen/typescript/`** consumes an AST and produces TypeScript source. Self-contained — a new codegen lives as a sibling directory and consumes the same AST. The macro system (`macros/`) is shared between codegens, but each codegen decides what to do with macro output.
+**`codegen/lua/`** consumes an AST and produces Lua source. The macro system (`macros/`) registers emitters that produce Lua snippets the codegen weaves into the right slot (struct factory body, impl method block, module top level).
 
-**`macros/`** holds the registry + built-in macros. Macros emit code snippets the codegen weaves into its output. The string-format of those snippets is target-specific today (built-in macros emit TypeScript), but the AST-level macro API in `macros/api.ts` is portable.
+**`macros/`** holds the registry + built-in macros. Macros emit Lua snippets the codegen weaves into its output. Built-in derives (`Clone`, `Equals`, `ToTable`, `Display`) attach functions to the target struct's table; built-in field constraints (`minLength`, `maxLength`, `minimum`, `maximum`, `pattern`) emit runtime guards in `.new`. Function-attribute macros are slot-only today — the bundled set is empty.
 
 ## Importing the modules
 
@@ -31,16 +30,27 @@ The package exposes each layer separately:
 ```ts
 import * as ast from "@flying-dice/neoc-compiler/ast";
 import { parse } from "@flying-dice/neoc-compiler/parser";
-import { emit } from "@flying-dice/neoc-compiler/codegen-ts";
+import { emit } from "@flying-dice/neoc-compiler/codegen-lua";
 import { transpile } from "@flying-dice/neoc-compiler/compiler";
 import type { Macro } from "@flying-dice/neoc-compiler/macro";
 ```
 
-## Adding a new codegen target
+## Adding a custom macro
 
-1. Create `src/neoc/codegen/<target>/index.ts` exposing an `emit(module, registry, options): EmitResult` function.
-2. Decide how macros translate. The built-in macros today emit TS snippets; for a new target you'd either re-implement them, or have macros emit a portable IR you translate.
-3. Add a package export in `package.json` so consumers can `import { emit } from "@flying-dice/neoc-compiler/codegen-<target>";`.
-4. Wire it into `compiler.ts` (or expose alongside the existing `transpile`) so the CLI / driver can pick the target.
+A user macro is a TypeScript module exporting one or more `Macro` objects:
 
-The biggest gap before a non-JS target works is the opaque-text bodies — those need to become real AST nodes the new codegen can walk.
+```ts
+import type { FieldConstraintMacro } from "@flying-dice/neoc-compiler/macro";
+
+export const isUuid: FieldConstraintMacro = {
+  kind: "field-constraint",
+  name: "uuid",
+  emit(_ctx, { struct, field }) {
+    return [
+      `if not string.match(data.${field.name}, "^[0-9a-f-]+$") then error("${struct.name}.${field.name}: not a uuid") end`,
+    ];
+  },
+};
+```
+
+Run the compiler with `--macros ./macros/uuid.ts`; every macro the module exports gets registered alongside the built-ins.

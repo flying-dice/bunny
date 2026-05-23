@@ -1,6 +1,6 @@
 id = "neoc"
 name = "neoc"
-description = "neoc — Rust-flavoured TypeScript dialect, language support."
+description = "neoc — Rust-flavoured Lua dialect, language support."
 version = "1.0.0"
 schema_version = 1
 authors = ["Jonathan Turnock"]
