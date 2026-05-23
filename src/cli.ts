@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import * as path from "node:path";
 import { parseArgs } from "node:util";
-import { buildProject, compileFile } from "./neoc/driver.ts";
+import { buildProject, compileFile, runTests } from "./neoc/driver.ts";
 import { runLsp } from "./neoc/lsp.ts";
 
 export interface RunCliOptions {
@@ -46,6 +46,19 @@ export async function runCli(opts: RunCliOptions = {}): Promise<string[]> {
       watch: values.watch ?? false,
       log,
     });
+  }
+
+  // `neoc test -s <glob>...` — compile + run every `#[test]` function.
+  if (cmd === "test") {
+    const globs = sourceGlobs.length > 0 ? sourceGlobs : ["**/*.neoc"];
+    const result = await runTests({
+      sourceGlobs: globs,
+      cwd,
+      macroModules,
+      log,
+    });
+    if (result.failed > 0) process.exit(1);
+    return [];
   }
 
   // `neoc compile <file.neoc> [-o out.lua]` — one-shot neoc transpile.
@@ -113,6 +126,7 @@ Usage: neoc <command> [flags]
 Commands:
   build    -s <glob>... [-w]       Compile every matching .neoc to sibling .lua.
   compile  <file.neoc> [-o out.lua] Transpile a single .neoc file.
+  test     [-s <glob>...]           Compile + run every #[test] function.
   lsp                              Stdio language server (used by editors).
 
 Flags:

@@ -125,9 +125,17 @@ export function emit(
         // Lua has no interface declaration. Trait default methods land
         // on impl sites via emitImpls. Nothing to emit here.
         break;
-      case "function":
-        push(emitFunction(part), part.span.start);
+      case "function": {
+        let replaced: string | undefined;
+        for (const attr of part.attrs) {
+          const m = registry.functionAttr(attr.name);
+          if (!m) continue;
+          const result = m.emit(ctx, { fn: part, attr });
+          if (result.replacement.length > 0) replaced = result.replacement;
+        }
+        push(replaced ?? emitFunction(part), part.span.start);
         break;
+      }
     }
   }
 
