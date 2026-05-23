@@ -7,17 +7,7 @@ dist
 *.tgz
 .tmp
 
-# generated example artefacts — regenerated with `bun run example:*`
-examples/api/routes.ts
-examples/csr/routes.ts
-examples/csr/client.ts
-examples/cli/cli-app.ts
-examples/sql/bus.ts
-examples/**/openapi.json
-examples/**/openapi.yaml
-examples/**/openapi.yml
-
-# tsb transpiler outputs (regenerated alongside the assemblers above)
+# tsb transpiler outputs — sourcemaps regenerate alongside the .ts.
 examples/**/*.ts.map
 
 # CSR build output
