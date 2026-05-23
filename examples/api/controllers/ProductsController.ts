@@ -11,8 +11,6 @@ export function getProduct(id: string): Product | undefined {
 }
 
 export function createProduct(body: CreateProductDto): Product {
-  // `body` is already validated by the `#[post]` macro at the route
-  // boundary — trust it. No second `.new(...)` here.
   return products.create(body);
 }
 
