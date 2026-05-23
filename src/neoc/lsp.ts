@@ -85,6 +85,48 @@ interface CodeAction {
 }
 
 /**
+ * Parameters for `textDocument/signatureHelp`. The editor sends the
+ * cursor position; the server walks back to the enclosing call and
+ * answers with the callee's signature plus the active parameter index.
+ */
+export interface SignatureHelpParams {
+  textDocument: { uri: string };
+  position: Position;
+}
+
+/**
+ * One parameter inside a `SignatureInformation`. `label` is the
+ * verbatim parameter text (e.g. `data: Product`); editors substring-
+ * match it inside the signature label to highlight the active slot.
+ */
+export interface ParameterInformation {
+  label: string;
+  documentation?: { kind: "markdown"; value: string };
+}
+
+/**
+ * One callable signature. The `label` is the rendered signature line
+ * (`Product.new(data: Product): Product`); `parameters` carries the
+ * per-parameter labels so the editor can highlight the active one.
+ */
+export interface SignatureInformation {
+  label: string;
+  documentation?: { kind: "markdown"; value: string };
+  parameters?: ParameterInformation[];
+}
+
+/**
+ * Result of `textDocument/signatureHelp`. Editors expect a single
+ * `signatures` array; `activeSignature` and `activeParameter` index
+ * into it.
+ */
+export interface SignatureHelp {
+  signatures: SignatureInformation[];
+  activeSignature?: number;
+  activeParameter?: number;
+}
+
+/**
  * Parameters for `textDocument/rename`. The editor sends the cursor
  * position and the new name; the server responds with a workspace-wide
  * `WorkspaceEdit` that replaces every occurrence.
@@ -246,6 +288,7 @@ export async function runLsp(): Promise<void> {
           documentSymbolProvider: true,
           referencesProvider: true,
           renameProvider: { prepareProvider: true },
+          signatureHelpProvider: { triggerCharacters: ["(", ","] },
         },
         serverInfo: { name: "neoc neoc", version: "0.1.0" },
       });
@@ -325,6 +368,12 @@ export async function runLsp(): Promise<void> {
       const p = msg.params as { textDocument: { uri: string }; position: Position };
       const doc = docs.get(p.textDocument.uri);
       respond(msg.id!, doc ? prepareRenameAt(doc, p.position, workspaceSymbols) : null);
+      return;
+    }
+    if (msg.method === "textDocument/signatureHelp") {
+      const p = msg.params as SignatureHelpParams;
+      const doc = docs.get(p.textDocument.uri);
+      respond(msg.id!, doc ? signatureHelpAt(doc, p.position, workspaceSymbols) : null);
       return;
     }
     if (msg.method === "textDocument/rename") {
@@ -1663,6 +1712,237 @@ function buildSkipMask(text: string): Uint8Array {
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// ----------------------------------------------------------------------------
+// Signature help
+// ----------------------------------------------------------------------------
+
+/**
+ * Resolve the signature for the call site enclosing `pos`. Walks back
+ * over balanced brackets, skipping strings and line comments, until it
+ * finds an unmatched `(`. The token (or `Type.method` form) immediately
+ * to its left names the callee; the comma count at the same paren
+ * depth between that `(` and the cursor gives `activeParameter`.
+ *
+ * Returns `null` when the cursor isn't inside a call, the callee isn't
+ * recognised, or the document didn't parse.
+ */
+export function signatureHelpAt(
+  doc: DocState,
+  pos: Position,
+  workspace: ReadonlyMap<string, WorkspaceSymbol>,
+): SignatureHelp | null {
+  const offset = positionToOffset(doc.text, pos);
+  const call = findEnclosingCall(doc.text, offset);
+  if (!call) return null;
+  const info = resolveCallee(call.callee, doc, workspace);
+  if (!info) return null;
+  return {
+    signatures: [info],
+    activeSignature: 0,
+    activeParameter: call.activeParameter,
+  };
+}
+
+interface EnclosingCall {
+  /** Verbatim callee text: `foo`, `Product.new`, `value.label`. */
+  callee: string;
+  /** Zero-based index of the active argument (0 → first arg). */
+  activeParameter: number;
+}
+
+// Walk backwards from `offset - 1` over balanced `()` / `[]` / `{}`,
+// skipping strings and `//` line comments. Count commas at the same
+// paren depth as the enclosing `(`. The token preceding the unmatched
+// `(` is the callee; supports `name`, `Type.method`, and `value.method`.
+function findEnclosingCall(text: string, offset: number): EnclosingCall | null {
+  const skip = computeSkipMask(text);
+  let depthParen = 0;
+  let depthBracket = 0;
+  let depthBrace = 0;
+  let activeParameter = 0;
+  for (let i = offset - 1; i >= 0; i--) {
+    if (skip[i]) continue;
+    const c = text[i];
+    if (c === ")") { depthParen++; continue; }
+    if (c === "]") { depthBracket++; continue; }
+    if (c === "}") { depthBrace++; continue; }
+    if (c === "[") {
+      if (depthBracket === 0) return null;
+      depthBracket--;
+      continue;
+    }
+    if (c === "{") {
+      if (depthBrace === 0) return null;
+      depthBrace--;
+      continue;
+    }
+    if (c === "(") {
+      if (depthParen > 0) { depthParen--; continue; }
+      // Unmatched `(` — this is the call we're inside.
+      const callee = readCalleeBefore(text, i);
+      if (!callee) return null;
+      return { callee, activeParameter };
+    }
+    if (c === "," && depthParen === 0 && depthBracket === 0 && depthBrace === 0) {
+      activeParameter++;
+    }
+  }
+  return null;
+}
+
+// Read a callee expression ending at `parenIndex - 1`. Accepts a bare
+// identifier or a dotted `Receiver.member` chain (one level deep, which
+// covers `Product.new` and `value.label`). Skips whitespace between
+// the `(` and the identifier.
+function readCalleeBefore(text: string, parenIndex: number): string | null {
+  let i = parenIndex - 1;
+  while (i >= 0 && (text[i] === " " || text[i] === "\t" || text[i] === "\n" || text[i] === "\r")) i--;
+  const end = i + 1;
+  while (i >= 0 && /[A-Za-z0-9_$.]/.test(text[i] ?? "")) i--;
+  const start = i + 1;
+  if (start >= end) return null;
+  const name = text.slice(start, end);
+  // Trailing dot would mean we're in the middle of typing — reject.
+  if (name.endsWith(".") || name.startsWith(".")) return null;
+  return name;
+}
+
+// Look up the callee in the local document, then the workspace.
+// Recognises plain function names, struct factory calls (`Foo.new`),
+// and impl methods called as `Foo.bar(…)` when declared inherently
+// on the struct in the open document.
+function resolveCallee(
+  callee: string,
+  doc: DocState,
+  workspace: ReadonlyMap<string, WorkspaceSymbol>,
+): SignatureInformation | null {
+  const dot = callee.indexOf(".");
+  if (dot < 0) {
+    return resolveFunctionSignature(callee, doc, workspace);
+  }
+  const receiver = callee.slice(0, dot);
+  const member = callee.slice(dot + 1);
+  // `Foo.new` — struct factory.
+  if (member === "new") {
+    const struct = findStruct(receiver, doc, workspace);
+    if (struct) {
+      return structFactorySignature(struct.name, struct.doc);
+    }
+  }
+  // `Foo.method` — impl method called via the type's namespace.
+  return lookupImplMethod(receiver, member, doc);
+}
+
+function resolveFunctionSignature(
+  name: string,
+  doc: DocState,
+  workspace: ReadonlyMap<string, WorkspaceSymbol>,
+): SignatureInformation | null {
+  if (doc.module) {
+    for (const p of doc.module.parts) {
+      if (p.kind === "function" && p.name === name) {
+        const docText = extractDocBefore(doc.text, p.span.start);
+        return functionSignatureInfo(p.name, p.signature, p.params, docText);
+      }
+    }
+  }
+  const sym = workspace.get(`function:${name}`);
+  if (sym) {
+    // Workspace `detail` is `fn <name><signature>`. Strip the prefix.
+    const sigText = sym.detail.startsWith(`fn ${name}`)
+      ? sym.detail.slice(`fn ${name}`.length)
+      : sym.detail;
+    const paramsText = extractParamsFromSignature(sigText);
+    return functionSignatureInfo(name, sigText, paramsText, sym.doc);
+  }
+  return null;
+}
+
+interface StructInfo { name: string; doc: string | undefined }
+
+function findStruct(
+  name: string,
+  doc: DocState,
+  workspace: ReadonlyMap<string, WorkspaceSymbol>,
+): StructInfo | null {
+  if (doc.module) {
+    for (const p of doc.module.parts) {
+      if (p.kind === "struct" && p.name === name) {
+        return { name: p.name, doc: extractDocBefore(doc.text, p.span.start) };
+      }
+    }
+  }
+  const sym = workspace.get(`struct:${name}`);
+  if (sym) return { name: sym.name, doc: sym.doc };
+  return null;
+}
+
+function lookupImplMethod(
+  structName: string,
+  methodName: string,
+  doc: DocState,
+): SignatureInformation | null {
+  if (!doc.module) return null;
+  for (const p of doc.module.parts) {
+    if (p.kind !== "impl") continue;
+    if (p.name !== structName) continue;
+    for (const m of p.methods) {
+      if (m.name !== methodName) continue;
+      const label = `${structName}.${methodName}${m.signature}`;
+      const docText = extractDocBefore(doc.text, m.span.start);
+      return buildSignatureInfo(label, m.params, docText);
+    }
+  }
+  return null;
+}
+
+function functionSignatureInfo(
+  name: string,
+  signature: string,
+  params: string,
+  docText: string | undefined,
+): SignatureInformation {
+  return buildSignatureInfo(`${name}${signature}`, params, docText);
+}
+
+function structFactorySignature(
+  structName: string,
+  docText: string | undefined,
+): SignatureInformation {
+  const label = `${structName}.new(data: ${structName}): ${structName}`;
+  return buildSignatureInfo(label, `data: ${structName}`, docText);
+}
+
+function buildSignatureInfo(
+  label: string,
+  paramsText: string,
+  docText: string | undefined,
+): SignatureInformation {
+  const parameters: ParameterInformation[] = parseParamList(paramsText).map((p) => ({
+    label: `${p.name}: ${p.type}`,
+  }));
+  const info: SignatureInformation = { label, parameters };
+  if (docText) info.documentation = { kind: "markdown", value: docText };
+  return info;
+}
+
+// Pull out the parameter list (between the outermost `(` and matching
+// `)`) from a verbatim signature string like `(a: number): boolean`.
+function extractParamsFromSignature(sig: string): string {
+  const open = sig.indexOf("(");
+  if (open < 0) return "";
+  let depth = 0;
+  for (let i = open; i < sig.length; i++) {
+    const c = sig[i];
+    if (c === "(") depth++;
+    else if (c === ")") {
+      depth--;
+      if (depth === 0) return sig.slice(open + 1, i);
+    }
+  }
+  return sig.slice(open + 1);
 }
 
 // ----------------------------------------------------------------------------
