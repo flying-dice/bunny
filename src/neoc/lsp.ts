@@ -34,6 +34,10 @@
  *     `tag(…)`, `Foo.method(…)`), drawn from the callee's parameter
  *     list. Hints are skipped for unresolved callees so the editor
  *     never shows wrong labels.
+ *   - `textDocument/codeLens` — clickable labels above declarations.
+ *     Emits a "Run test" lens above every `#[test]` function, and an
+ *     "N references" lens above every struct, trait, and function with
+ *     the reference count drawn from the workspace scan.
  */
 
 import { readFileSync } from "node:fs";
@@ -201,6 +205,33 @@ export interface InlayHint {
 }
 
 /**
+ * Parameters for `textDocument/codeLens`. The editor sends only the
+ * document URI; the server walks every top-level declaration and
+ * answers with the lenses that apply.
+ */
+export interface CodeLensParams {
+  textDocument: { uri: string };
+}
+
+/**
+ * One clickable label rendered above a declaration. `range` covers the
+ * declaration's first line — that's where the editor anchors the lens
+ * text. `command` carries the action to dispatch when the user clicks.
+ */
+export interface CodeLens {
+  range: Range;
+  command?: { title: string; command: string; arguments?: unknown[] };
+  data?: unknown;
+}
+
+/**
+ * Cap on the number of `.neoc` files scanned for reference counts in a
+ * single `codeLensesFor` invocation. Keeps the lens cheap on large
+ * workspaces — accurate counts above this cap aren't worth the latency.
+ */
+const CODE_LENS_REFERENCE_FILE_LIMIT = 50;
+
+/**
  * LSP `SymbolKind` integer constants — the subset neoc uses for its
  * document-symbol outline. Mirrors the LSP spec verbatim.
  */
@@ -366,6 +397,7 @@ export async function runLsp(): Promise<void> {
           referencesProvider: true,
           renameProvider: { prepareProvider: true },
           signatureHelpProvider: { triggerCharacters: ["(", ","] },
+          codeLensProvider: { resolveProvider: false },
         },
         serverInfo: { name: "neoc neoc", version: "0.1.0" },
       });
@@ -470,6 +502,15 @@ export async function runLsp(): Promise<void> {
       const p = msg.params as InlayHintParams;
       const doc = docs.get(p.textDocument.uri);
       respond(msg.id!, doc ? inlayHintsFor(doc, p.range, workspaceSymbols) : []);
+      return;
+    }
+    if (msg.method === "textDocument/codeLens") {
+      const p = msg.params as CodeLensParams;
+      const doc = docs.get(p.textDocument.uri);
+      const lenses = doc
+        ? await codeLensesFor(doc, p.textDocument.uri, workspaceRoots)
+        : [];
+      respond(msg.id!, lenses);
       return;
     }
 
@@ -2133,6 +2174,119 @@ function extractParamsFromSignatureText(sig: string): string {
     }
   }
   return sig.slice(open + 1);
+}
+
+// ----------------------------------------------------------------------------
+// Code lens
+// ----------------------------------------------------------------------------
+
+/**
+ * Build the lenses shown above every recognised declaration in `doc`.
+ *
+ * Emits two flavours:
+ *
+ *  - **Run test** — above every `function` declaration carrying a
+ *    `#[test]` attribute. Dispatches `neoc.runTest` with the function
+ *    name as its sole argument.
+ *  - **N references** — above every struct, trait, and function. The
+ *    count comes from a textual scan via {@link findReferences}, capped
+ *    at {@link CODE_LENS_REFERENCE_FILE_LIMIT} files so the lookup stays
+ *    cheap on large workspaces. Dispatches `neoc.showReferences` with
+ *    the declaration's position.
+ *
+ * The lens `range` covers just the declaration's first line — the line
+ * the editor floats the lens above.
+ *
+ * @param doc - Parsed document the lenses refer to.
+ * @param uri - URI of `doc`, threaded into the references command.
+ * @param workspaceRoots - Roots scanned for cross-file references.
+ *   Treated as read-only.
+ * @returns The lenses in declaration order. Empty when the document
+ *   failed to parse.
+ */
+export async function codeLensesFor(
+  doc: DocState,
+  uri: string,
+  workspaceRoots: readonly string[],
+): Promise<CodeLens[]> {
+  if (!doc.module) return [];
+  const out: CodeLens[] = [];
+  const capped = capWorkspaceRoots(workspaceRoots, CODE_LENS_REFERENCE_FILE_LIMIT);
+  for (const part of doc.module.parts) {
+    if (part.kind === "opaque") continue;
+    const range = firstLineRange(doc.text, part.span);
+    if (part.kind === "function" && hasTestAttribute(part)) {
+      out.push({
+        range,
+        command: {
+          title: "▶ Run test",
+          command: "neoc.runTest",
+          arguments: [part.name],
+        },
+      });
+    }
+    if (part.kind === "struct" || part.kind === "trait" || part.kind === "function") {
+      const namePos = declarationNamePosition(doc.text, part.span, part.name);
+      const refs = await findReferences(doc, namePos, uri, capped);
+      // `findReferences` is a textual scan and counts the declaration's
+      // own name token alongside genuine uses. Subtract that one site so
+      // the lens reflects external references only — matching how every
+      // other LSP renders "N references" above a definition.
+      const count = Math.max(0, refs.length - 1);
+      out.push({
+        range,
+        command: {
+          title: `${count} reference${count === 1 ? "" : "s"}`,
+          command: "neoc.showReferences",
+          arguments: [{ uri, position: namePos }],
+        },
+      });
+    }
+  }
+  return out;
+}
+
+// Bound the workspace scan to the first `limit` roots so each lens
+// build stays cheap. `findReferences` already loops the file list per
+// root; capping the roots shields the call from runaway scans when the
+// user opens a giant multi-root workspace.
+function capWorkspaceRoots(
+  roots: readonly string[],
+  limit: number,
+): readonly string[] {
+  if (roots.length <= limit) return roots;
+  return roots.slice(0, limit);
+}
+
+// Range covering the declaration's first line — from the line start
+// containing `span.start` up to the end of that same line. The editor
+// floats the lens above this range.
+function firstLineRange(text: string, span: M.Span): Range {
+  const start = offsetToPosition(text, span.start);
+  const lineStartOffset = span.start - start.character;
+  let lineEndOffset = lineStartOffset;
+  while (lineEndOffset < text.length && text.charCodeAt(lineEndOffset) !== 10) {
+    lineEndOffset++;
+  }
+  return {
+    start: { line: start.line, character: 0 },
+    end: offsetToPosition(text, lineEndOffset),
+  };
+}
+
+// Cursor position landing on the declaration's name token.
+// `findReferences` reads the word at that position to know what to
+// count, so anchoring on the name keeps the count in sync with the
+// symbol.
+function declarationNamePosition(text: string, span: M.Span, name: string): Position {
+  const slice = text.slice(span.start, span.end);
+  const rel = slice.indexOf(name);
+  const offset = rel < 0 ? span.start : span.start + rel;
+  return offsetToPosition(text, offset);
+}
+
+function hasTestAttribute(fn: M.FunctionDecl): boolean {
+  return fn.attrs.some((a) => a.name === "test");
 }
 
 // ----------------------------------------------------------------------------
