@@ -81,7 +81,24 @@ class TsbLexer : LexerBase() {
     }
 
     if (c == '#' && peek(1) == '[') {
+      // Consume the entire `#[ … ]` block as a single attribute token
+      // so the macro's contents stay one consistent colour instead of
+      // re-colouring derive names / arguments as functions and types.
+      // Bracket-counting so nested `[`/`]` inside attribute arguments
+      // (rare but legal) still finds the right closer.
       endOffset = startOffset + 2
+      var depth = 1
+      while (endOffset < bufferEnd && depth > 0) {
+        val ch = buffer[endOffset]
+        if (ch == '[') depth++
+        else if (ch == ']') depth--
+        else if (ch == '\n' && depth == 1) {
+          // Unterminated `#[…` — bail at end of line so we don't eat
+          // the rest of the file.
+          break
+        }
+        endOffset++
+      }
       tokenType = TsbTokenTypes.ATTRIBUTE
       return
     }
