@@ -180,6 +180,9 @@ export function emit(
       case "trait":
         push(emitTrait(part), part.span.start);
         break;
+      case "enum":
+        push(emitEnum(part), part.span.start);
+        break;
       case "function":
         push(emitFunction(part, registry, ctx), part.span.start);
         break;
@@ -236,6 +239,47 @@ function emitTrait(t: M.TraitDecl): string {
     lines.push(`  ${async}${m.name}${sig};`);
   }
   lines.push("}");
+  return lines.join("\n");
+}
+
+/**
+ * Lower an `enum` into a TS discriminated-union type plus a namespace
+ * `const` carrying the variant constructors. Each variant uses
+ * `kind: "<VariantName>"` as the discriminator — the canonical TS
+ * tagged-union shape.
+ *
+ * Unit variants emit as `const`-bound objects so users can write
+ * `CalcError.DivByZero` directly. Struct variants emit as one-arg
+ * factory functions: `CalcError.BadNumber({ input: "x" })`.
+ */
+function emitEnum(e: M.EnumDecl): string {
+  const lines: string[] = [];
+  // Type union — one branch per variant.
+  const branches = e.variants.map((v) => {
+    const fields = v.fields
+      .map((f) => `${f.name}${f.optional ? "?" : ""}: ${f.type}`)
+      .join("; ");
+    return v.fields.length === 0
+      ? `  | { kind: ${JSON.stringify(v.name)} }`
+      : `  | { kind: ${JSON.stringify(v.name)}; ${fields} }`;
+  });
+  lines.push(`export type ${e.name}${e.generics} =`);
+  lines.push(branches.join("\n") + ";");
+
+  // Namespace const with constructors / unit values.
+  const ctorLines = e.variants.map((v) => {
+    if (v.fields.length === 0) {
+      return `  ${v.name}: { kind: ${JSON.stringify(v.name)} } as ${e.name}`;
+    }
+    const fieldsType = v.fields
+      .map((f) => `${f.name}${f.optional ? "?" : ""}: ${f.type}`)
+      .join("; ");
+    return `  ${v.name}(fields: { ${fieldsType} }): ${e.name} { return { kind: ${JSON.stringify(v.name)}, ...fields }; }`;
+  });
+  lines.push("");
+  lines.push(`export const ${e.name} = {`);
+  lines.push(ctorLines.join(",\n") + ",");
+  lines.push(`};`);
   return lines.join("\n");
 }
 

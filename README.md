@@ -155,25 +155,36 @@ Same-module struct fields chain automatically (no `#[deep]` needed). Cross-modul
 | `Hash` | `hash(self): string` (stable FNV-1a over the JSON form) |
 | `Event` | side-effect only: emits an `__event_<Name>` descriptor the events assembler harvests |
 
-### `match`
+### `enum` + `match`
 
-Pattern matching over literals, identifiers, and object patterns. Object patterns support two kinds of entries: a literal **check** (`kind: "X"` requires the field equals the literal) and a **binding** (`value: v` pulls the field's value into the arm's scope as `v`). Mix them freely.
+`enum` declares a Rust-style tagged union. Each variant is either a *unit* (just a name) or a *struct* variant with named fields. tsb emits a TS discriminated-union type plus a namespace `const` carrying the variant constructors — Rust's `EnumName::Variant` becomes `EnumName.Variant`.
 
 ```tsb
-type Event =
-  | { kind: "Hello"; who: string }
-  | { kind: "Bye" };
-
-export function announce(e: Event): string {
-  return match e {
-    { kind: "Hello", who: name } => `hi, ${name}`,
-    { kind: "Bye" }              => "bye",
-    _                            => "?",
-  };
+enum CalcError {
+  BadNumber { input: string },
+  UnknownOp { op: string },
+  DivByZero,
 }
 
+// Construct:
+Err(CalcError.BadNumber({ input: "x" }));
+Err(CalcError.DivByZero);
+
+// Match (variant patterns, with field bindings + shorthand):
+function describe(err: CalcError): string {
+  return match err {
+    CalcError.BadNumber { input }  => `not a number: ${input}`,
+    CalcError.UnknownOp { op }     => `unknown operator: ${op}`,
+    CalcError.DivByZero            => "cannot divide by zero",
+  };
+}
+```
+
+Object patterns still work for matching plain discriminated unions or Result. Each pattern entry is either a literal **check** (`kind: "X"` requires equality) or a **binding** (`value: v` pulls the field's value into the arm's scope as `v`; `{ value }` is the shorthand). Mix them freely.
+
+```tsb
 // Match on Result with payload bindings:
-export function describe(r: Result<number, string>): string {
+function explain(r: Result<number, string>): string {
   return match r {
     { ok: true, value: v }  => `ok: ${v}`,
     { ok: false, error: e } => `err: ${e}`,
