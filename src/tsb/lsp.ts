@@ -18,9 +18,9 @@
  * a useful surface without that dependency.
  */
 
-import { parse } from "./parser.ts";
-import * as M from "./model.ts";
-import { transpile } from "./transpile.ts";
+import { parse } from "./parser/index.ts";
+import * as M from "./ast/index.ts";
+import { transpile } from "./compiler.ts";
 
 interface JsonRpcMessage {
   jsonrpc: "2.0";
@@ -74,14 +74,14 @@ export async function runLsp(): Promise<void> {
 
     if (msg.method === "textDocument/didOpen") {
       const p = msg.params as { textDocument: { uri: string; text: string } };
-      setDoc(docs, p.textDocument.uri, p.textDocument.text);
+      await setDoc(docs, p.textDocument.uri, p.textDocument.text);
       await publishDiagnostics(p.textDocument.uri, p.textDocument.text);
       return;
     }
     if (msg.method === "textDocument/didChange") {
       const p = msg.params as { textDocument: { uri: string }; contentChanges: { text: string }[] };
       const text = p.contentChanges[0]?.text ?? "";
-      setDoc(docs, p.textDocument.uri, text);
+      await setDoc(docs, p.textDocument.uri, text);
       await publishDiagnostics(p.textDocument.uri, text);
       return;
     }
@@ -119,10 +119,10 @@ export async function runLsp(): Promise<void> {
   });
 }
 
-function setDoc(docs: Map<string, DocState>, uri: string, text: string): void {
+async function setDoc(docs: Map<string, DocState>, uri: string, text: string): Promise<void> {
   let module: M.Module | undefined;
   try {
-    module = parse(text).module;
+    module = (await parse(text)).module;
   } catch {
     module = undefined;
   }
@@ -155,7 +155,7 @@ async function publishDiagnostics(uri: string, text: string): Promise<void> {
 // Completion
 // ----------------------------------------------------------------------------
 
-const KEYWORDS = ["struct", "impl", "match", "for", "From", "Into", "fn", "export", "type", "interface", "import"];
+const KEYWORDS = ["struct", "impl", "trait", "match", "for", "Self", "function", "export", "type", "import", "from", "as", "let", "const", "return", "if", "else", "async", "await"];
 const DERIVE_NAMES = ["Clone", "Equals", "ToJson", "Display", "Default", "Hash"];
 const CONSTRAINT_MACROS = ["minLength", "maxLength", "minimum", "maximum", "format", "pattern"];
 const ROUTE_MACROS = ["get", "post", "put", "patch", "delete", "head", "options"];

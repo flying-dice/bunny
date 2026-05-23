@@ -8,7 +8,7 @@
  * user-authored macros use the same API.
  */
 
-import * as M from "./model.ts";
+import * as M from "../ast/index.ts";
 
 export interface MacroContext {
   module: M.Module;

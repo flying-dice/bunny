@@ -20,7 +20,7 @@ export type {
   Span,
   StructDecl,
   StructField,
-} from "./model.ts";
+} from "../ast/index.ts";
 
 export type {
   DeriveMacro,
@@ -32,4 +32,4 @@ export type {
   FunctionAttrResult,
   Macro,
   MacroContext,
-} from "./macros.ts";
+} from "./registry.ts";

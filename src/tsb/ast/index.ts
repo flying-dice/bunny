@@ -1,9 +1,19 @@
 /**
- * Model types for the tsb compiler. A `.tsb` source parses into a `Module`
- * which is a flat ordered list of `ModulePart`s. Anything bunny doesn't
- * recognise as a struct/impl/function declaration is `OpaqueText` —
- * forwarded verbatim to the output. Recognised declarations carry their
- * attributes so macros can operate on them.
+ * tsb AST — typed node definitions. The parser produces these from
+ * source text; codegen consumes them.
+ *
+ * A `.tsb` source parses into a `Module`, a flat ordered list of
+ * `ModulePart`s. Recognised declarations (struct / impl / trait /
+ * function) carry their full structure plus any attributes; anything
+ * else is `OpaqueText` and forwards verbatim to the output.
+ *
+ * Today method and function *bodies* are stored as opaque text — fine
+ * for the TypeScript codegen (the body passes through after match
+ * lowering and macro injection) but a future codegen for another
+ * target (Go, Rust, …) will need a richer expression / statement
+ * AST. The shape below is the migration target: extend each
+ * declaration's body field to a real `StatementBlock` AST node, and
+ * teach the parser to populate it.
  */
 
 export interface Span {

@@ -7,7 +7,11 @@
   },
   "exports": {
     ".": "./src/index.ts",
-    "./macro": "./src/tsb/macro-api.ts"
+    "./ast": "./src/tsb/ast/index.ts",
+    "./parser": "./src/tsb/parser/index.ts",
+    "./codegen-ts": "./src/tsb/codegen/typescript/index.ts",
+    "./compiler": "./src/tsb/compiler.ts",
+    "./macro": "./src/tsb/macros/api.ts"
   },
   "scripts": {
     "test": "bun test",
@@ -38,6 +42,7 @@
   },
   "dependencies": {
     "react": "^19.2.6",
-    "react-dom": "^19.2.6"
+    "react-dom": "^19.2.6",
+    "web-tree-sitter": "^0.26.9"
   }
 }

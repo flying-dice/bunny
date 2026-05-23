@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { tokenize } from "./scanner.ts";
+import { tokenize } from "./parser/scanner.ts";
 
 function roundTrip(src: string): void {
   const tokens = tokenize(src);

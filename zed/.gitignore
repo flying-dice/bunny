@@ -2,3 +2,4 @@
 /extension.wasm
 Cargo.lock
 /grammars/
+/grammars-src/

@@ -3,11 +3,11 @@
  *
  *   const { ts, diagnostics } = transpile(source);
  */
-import { registerBuiltins } from "./builtin-macros.ts";
-import { emit, type EmitChunk } from "./emitter.ts";
-import { MacroRegistry } from "./macros.ts";
-import * as M from "./model.ts";
-import { parse } from "./parser.ts";
+import { registerBuiltins } from "./macros/builtins.ts";
+import { emit, type EmitChunk } from "./codegen/typescript/index.ts";
+import { MacroRegistry } from "./macros/registry.ts";
+import * as M from "./ast/index.ts";
+import { parseViaTreeSitter } from "./parser/adapter.ts";
 
 export interface TranspileOptions {
   /**
@@ -36,7 +36,7 @@ export async function transpile(
   source: string,
   options: TranspileOptions = {}
 ): Promise<TranspileResult> {
-  const { module, diagnostics: parseDiags } = parse(source);
+  const { module, diagnostics: parseDiags } = await parseViaTreeSitter(source);
   const registry = new MacroRegistry();
   registerBuiltins(registry);
   for (const path of options.macroModules ?? []) {

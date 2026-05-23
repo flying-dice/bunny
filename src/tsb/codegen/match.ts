@@ -31,7 +31,7 @@
  * patterns, and nested patterns land in later passes.
  */
 
-import { tokenize, type Token } from "./scanner.ts";
+import { tokenize, type Token } from "../parser/scanner.ts";
 
 /**
  * Walk a body string, find every `match` expression, lower it. Bodies

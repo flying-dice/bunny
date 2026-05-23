@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import * as path from "node:path";
 import { parseArgs } from "node:util";
-import { buildProject, compileFile } from "./tsb/compile.ts";
+import { buildProject, compileFile } from "./tsb/driver.ts";
 import { runLsp } from "./tsb/lsp.ts";
 
 export interface RunCliOptions {

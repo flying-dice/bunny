@@ -14,14 +14,14 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, parse as parsePath } from "node:path";
-import * as M from "./model.ts";
+import * as M from "../ast/index.ts";
 import type {
   DeriveMacro,
   FieldConstraintMacro,
   FunctionAttrMacro,
   Macro,
   MacroRegistry,
-} from "./macros.ts";
+} from "./registry.ts";
 
 /** Register every built-in macro on the given registry. */
 export function registerBuiltins(registry: MacroRegistry): void {

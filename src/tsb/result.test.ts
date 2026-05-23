@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { transpile } from "./transpile.ts";
+import { transpile } from "./compiler.ts";
 
 test("tryNew is not emitted when the struct has no constraints", async () => {
   const { ts, usesResult } = await transpile(`

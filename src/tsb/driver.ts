@@ -12,8 +12,8 @@
  * injection.
  */
 import * as path from "node:path";
-import { appendSourceMappingURL, generateSourceMap } from "./sourcemap.ts";
-import { transpile } from "./transpile.ts";
+import { appendSourceMappingURL, generateSourceMap } from "./codegen/sourcemap.ts";
+import { transpile } from "./compiler.ts";
 
 export interface CompileOptions {
   /** Path to the input `.tsb` file (absolute or cwd-relative). */

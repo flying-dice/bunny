@@ -1,6 +1,16 @@
 /**
- * Emit final TypeScript from a tsb `Module` model, running macros along
- * the way.
+ * TypeScript codegen — AST → `.ts` source.
+ *
+ * One concrete implementation of "given a tsb AST, emit a target
+ * language". A future Go / Rust codegen lives as a sibling under
+ * `../go/`, `../rust/` etc. and consumes the same AST shape.
+ *
+ * Today the AST carries method/function bodies as opaque text, which
+ * works for TypeScript (the body is already valid TS, just needs
+ * match lowering + macro injection). Cross-language codegens will
+ * require richer expression/statement AST nodes — see the migration
+ * note in `../../ast/index.ts`.
+ *
  *
  * Order of operations per module:
  *
@@ -16,9 +26,9 @@
  * emitter weaves into the right slot.
  */
 
-import * as M from "./model.ts";
-import { type MacroContext, MacroRegistry } from "./macros.ts";
-import { lowerMatchExpressions } from "./match.ts";
+import * as M from "../../ast/index.ts";
+import { type MacroContext, MacroRegistry } from "../../macros/registry.ts";
+import { lowerMatchExpressions } from "../match.ts";
 
 export interface EmitChunk {
   text: string;

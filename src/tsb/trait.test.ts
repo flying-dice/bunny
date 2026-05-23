@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { transpile } from "./transpile.ts";
+import { transpile } from "./compiler.ts";
 
 test("match binds object-pattern fields into the arm scope", async () => {
   const { ts } = await transpile(`

@@ -4,7 +4,7 @@ import "../bunny.runtime.ts";
 
 export type Isbn = {
   readonly _struct?: "Isbn";
-  value: string;
+  value?: string;
 };
 export const Isbn = {
   new(data: Omit<Isbn, "_struct">): Isbn {

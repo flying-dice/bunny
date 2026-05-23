@@ -43,6 +43,17 @@ zed/Cargo.lock
 zed/grammars/
 zed/extension.wasm
 
+# tsb tree-sitter grammar: inner git repo + generated artefacts.
+# The grammar source (grammar.js + queries + test corpus) is tracked,
+# but the inner .git is created on demand via `zed/setup-grammar.sh`
+# and parser.c/scanner.c are regenerated via `tree-sitter generate`.
+zed/tree-sitter-tsb/.git/
+zed/tree-sitter-tsb/node_modules/
+zed/tree-sitter-tsb/src/parser.c
+zed/tree-sitter-tsb/src/grammar.json
+zed/tree-sitter-tsb/src/tree_sitter/
+zed/tree-sitter-tsb/*.wasm
+
 # Playwright MCP working dir
 .playwright-mcp/
 

@@ -28,7 +28,7 @@ export const routes = {
 export const openapi = {
   "/api/todos": { ...{ get: {"operationId":"listTodos","parameters":[],"responses":{"200":{"description":"Successful response","content":{"application/json":{"schema":{"type":"array","items":{"$ref":"#/components/schemas/Todo"}}}}}}} as const }, ...{ post: {"operationId":"createTodo","parameters":[],"responses":{"200":{"description":"Successful response","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Todo"}}}}}} as const } },
   "/api/todos/{id}/toggle": { patch: {"operationId":"toggleTodo","parameters":[{"name":"id","in":"path","required":true,"schema":{"type":"string"}}],"responses":{"200":{"description":"Successful response","content":{"application/json":{"schema":{}}}}}} as const },
-  "/api/todos/{id}": { delete: {"operationId":"deleteTodo","parameters":[{"name":"id","in":"path","required":true,"schema":{"type":"string"}}],"responses":{"200":{"description":"Successful response","content":{"application/json":{"schema":{"type":"null"}}}}}} as const },
+  "/api/todos/{id}": { delete: {"operationId":"deleteTodo","parameters":[{"name":"id","in":"path","required":true,"schema":{"type":"string"}}],"responses":{"200":{"description":"Successful response","content":{"application/json":{"schema":{}}}}}} as const },
 };
 
 export const client = {

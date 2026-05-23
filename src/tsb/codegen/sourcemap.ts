@@ -16,7 +16,7 @@
  * lines without a `sourceOffset` keep the most recent known source position
  * so debuggers don't jump to (0,0).
  */
-import type { EmitChunk } from "./emitter.ts";
+import type { EmitChunk } from "./typescript/index.ts";
 
 export interface SourceMap {
   version: 3;
