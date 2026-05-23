@@ -67,6 +67,13 @@ interface WorkspaceSymbol {
   range: Range;
   /** Short detail line for the completion item / hover. */
   detail: string;
+  /**
+   * Rust-style doc comment block immediately preceding the
+   * declaration — either `///` line comments, or a block comment
+   * starting with double-asterisk. Markdown body, ready to render
+   * in the hover popup and completion preview.
+   */
+  doc?: string;
 }
 
 /** Run the LSP. Resolves when the client closes stdin. */
@@ -225,27 +232,77 @@ async function harvestSymbols(
     if (part.kind === "opaque") continue;
     const range = offsetsToRange(text, part.span.start, part.span.end);
     const key = `${part.kind}:${part.name}`;
-    let detail = "";
-    if (part.kind === "struct") {
-      const f = part.fields.map((x) => `${x.name}: ${x.type}`).join(", ");
-      detail = `struct ${part.name} { ${f} }`;
-    } else if (part.kind === "trait") {
-      detail = `trait ${part.name}`;
-    } else if (part.kind === "function") {
-      detail = `fn ${part.name}${part.signature}`;
-    } else if (part.kind === "impl") {
-      detail = part.traitName
-        ? `impl ${part.traitName} for ${part.name}`
-        : `impl ${part.name}`;
-    }
+    const detail = describePart(part);
+    const doc = extractDocBefore(text, part.span.start);
     out.set(key, {
       name: part.name,
       kind: part.kind,
       uri,
       range,
       detail,
+      doc,
     });
   }
+}
+
+// Walk backward from `beforeIndex` collecting a contiguous Rust-style
+// doc comment block — either `///` line comments OR a single block
+// comment opening with double-asterisk — ending right before the
+// declaration. Returns the unwrapped markdown body, or undefined when
+// nothing's there.
+function extractDocBefore(text: string, beforeIndex: number): string | undefined {
+  // Skip whitespace/blank lines between the declaration and any docs.
+  let i = beforeIndex - 1;
+  while (i >= 0 && (text[i] === " " || text[i] === "\t" || text[i] === "\n" || text[i] === "\r")) {
+    i--;
+  }
+  if (i < 0) return undefined;
+
+  // Try block-doc form first: comment ends with star-slash.
+  if (text[i] === "/" && text[i - 1] === "*") {
+    let j = i - 2;
+    while (j >= 1) {
+      // Match slash-star-star opener.
+      if (text[j] === "*" && text[j - 1] === "/" && text[j + 1] === "*") {
+        const body = text.slice(j + 2, i - 1);
+        return cleanBlockDoc(body);
+      }
+      j--;
+    }
+    return undefined;
+  }
+
+  // Line-doc form: contiguous `///` lines.
+  const lines: string[] = [];
+  // Position `i` is currently at the last char of a possible doc line.
+  // Scan back finding each `///` line and prepending.
+  while (i >= 0) {
+    // Walk to the start of the current line.
+    let lineStart = i;
+    while (lineStart > 0 && text[lineStart - 1] !== "\n") lineStart--;
+    const line = text.slice(lineStart, i + 1);
+    const trimmed = line.replace(/^\s+/, "");
+    if (trimmed.startsWith("///")) {
+      lines.unshift(trimmed.slice(3).replace(/^ /, ""));
+      i = lineStart - 1;
+      // Skip the newline + any whitespace at the end of the prev line.
+      while (i >= 0 && (text[i] === "\n" || text[i] === "\r" || text[i] === " " || text[i] === "\t")) i--;
+    } else {
+      break;
+    }
+  }
+  if (lines.length === 0) return undefined;
+  return lines.join("\n").trim();
+}
+
+function cleanBlockDoc(body: string): string {
+  // Each line inside a block doc typically starts with whitespace + a
+  // leading asterisk. Strip that to get the markdown body.
+  return body
+    .split("\n")
+    .map((line) => line.replace(/^\s*\*\s?/, ""))
+    .join("\n")
+    .trim();
 }
 
 async function publishDiagnostics(uri: string, text: string): Promise<void> {
@@ -279,7 +336,14 @@ const DERIVE_NAMES = ["Clone", "Equals", "ToJson", "Display", "Default", "Hash"]
 const CONSTRAINT_MACROS = ["minLength", "maxLength", "minimum", "maximum", "format", "pattern"];
 const ROUTE_MACROS = ["get", "post", "put", "patch", "delete", "head", "options"];
 
-interface CompletionItem { label: string; kind: number; detail?: string; insertText?: string }
+interface CompletionItem {
+  label: string;
+  kind: number;
+  detail?: string;
+  insertText?: string;
+  /** Markdown body. Zed shows this in the completion preview pane. */
+  documentation?: { kind: "markdown"; value: string };
+}
 
 function completionsAt(
   doc: DocState,
@@ -317,7 +381,7 @@ function completionsAt(
   // call sites can autocomplete.
   for (const k of KEYWORDS) items.push({ label: k, kind: 14 /* Keyword */ });
   for (const sym of workspace.values()) {
-    items.push({ label: sym.name, kind: kindFor(sym.kind), detail: sym.detail });
+    items.push(symbolToCompletion(sym));
   }
   if (doc.module) {
     for (const p of doc.module.parts) {
@@ -326,11 +390,32 @@ function completionsAt(
       // — dedupe by removing the workspace entry that matches.
       const idx = items.findIndex((i) => i.label === p.name && (i.kind === 22 || i.kind === 3));
       if (idx >= 0) items.splice(idx, 1);
-      const detail = describePart(p);
-      items.push({ label: p.name, kind: kindFor(p.kind), detail });
+      items.push(localPartToCompletion(p, doc.text));
     }
   }
   return { isIncomplete: false, items };
+}
+
+function symbolToCompletion(sym: WorkspaceSymbol): CompletionItem {
+  return {
+    label: sym.name,
+    kind: kindFor(sym.kind),
+    detail: sym.detail,
+    documentation: sym.doc ? { kind: "markdown", value: sym.doc } : undefined,
+  };
+}
+
+function localPartToCompletion(part: M.ModulePart, sourceText: string): CompletionItem {
+  if (part.kind === "opaque") {
+    return { label: "", kind: 0 };
+  }
+  const doc = extractDocBefore(sourceText, part.span.start);
+  return {
+    label: part.name,
+    kind: kindFor(part.kind),
+    detail: describePart(part),
+    documentation: doc ? { kind: "markdown", value: doc } : undefined,
+  };
 }
 
 function addTypeCompletions(
@@ -343,7 +428,7 @@ function addTypeCompletions(
   }
   for (const sym of workspace.values()) {
     if (sym.kind === "struct" || sym.kind === "trait") {
-      items.push({ label: sym.name, kind: 22 /* Struct */, detail: sym.detail });
+      items.push(symbolToCompletion(sym));
     }
   }
   if (doc.module) {
@@ -351,7 +436,7 @@ function addTypeCompletions(
       if (p.kind === "struct" || p.kind === "trait") {
         const idx = items.findIndex((i) => i.label === p.name);
         if (idx >= 0) items.splice(idx, 1);
-        items.push({ label: p.name, kind: 22, detail: describePart(p) });
+        items.push(localPartToCompletion(p, doc.text));
       }
     }
   }
@@ -424,8 +509,9 @@ function hoverAt(
     for (const p of doc.module.parts) {
       if (p.kind === "opaque") continue;
       if (p.name === word.text) {
+        const localDoc = extractDocBefore(doc.text, p.span.start);
         return {
-          contents: { kind: "markdown", value: `**${describePart(p)}**` },
+          contents: { kind: "markdown", value: hoverMarkdown(describePart(p), localDoc) },
           range: word.range,
         };
       }
@@ -434,12 +520,19 @@ function hoverAt(
   for (const sym of workspace.values()) {
     if (sym.name === word.text) {
       return {
-        contents: { kind: "markdown", value: `**${sym.detail}**` },
+        contents: { kind: "markdown", value: hoverMarkdown(sym.detail, sym.doc) },
         range: word.range,
       };
     }
   }
   return null;
+}
+
+function hoverMarkdown(signature: string, doc: string | undefined): string {
+  // Code-block the signature so editors render it in monospace, then
+  // append the doc body (which is plain markdown already).
+  const sigBlock = "```tsb\n" + signature + "\n```";
+  return doc ? `${sigBlock}\n\n${doc}` : sigBlock;
 }
 
 // ----------------------------------------------------------------------------

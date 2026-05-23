@@ -1,5 +1,9 @@
 import type { ProductId } from "../types/ProductId.ts";
 
+/// A product sold in the shop.
+///
+/// Validated via field-constraint macros — `name` is required and
+/// length-bounded, prices and stock counts must be non-negative.
 #[derive(Clone, Equals, ToJson)]
 struct Product {
   id: ProductId,
@@ -11,8 +15,10 @@ struct Product {
   stock: number,
 }
 
-// A user-declared trait. The `display` method is required; `priceLabel`
-// has a default body that any `impl Display for X` inherits for free.
+/// Human-readable rendering for an entity.
+///
+/// `display` is required; `priceLabel` ships a default body that any
+/// `impl Display for X` inherits for free.
 trait Display {
   display(self: Self): string;
   priceLabel(self: Self): string {
