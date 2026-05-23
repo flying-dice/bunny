@@ -39,6 +39,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "tuple_struct_declaration"
+        },
+        {
+          "type": "SYMBOL",
           "name": "impl_declaration"
         },
         {
@@ -489,6 +493,51 @@
             "type": "SYMBOL",
             "name": "struct_body"
           }
+        }
+      ]
+    },
+    "tuple_struct_declaration": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "STRING",
+              "value": "export"
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
+        },
+        {
+          "type": "STRING",
+          "value": "struct"
+        },
+        {
+          "type": "FIELD",
+          "name": "name",
+          "content": {
+            "type": "SYMBOL",
+            "name": "type_identifier"
+          }
+        },
+        {
+          "type": "STRING",
+          "value": "("
+        },
+        {
+          "type": "FIELD",
+          "name": "tuple_type",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_type"
+          }
+        },
+        {
+          "type": "STRING",
+          "value": ")"
         }
       ]
     },
@@ -2343,6 +2392,31 @@
           }
         },
         {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "STRING",
+                  "value": "if"
+                },
+                {
+                  "type": "FIELD",
+                  "name": "guard",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "_expression"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
+        },
+        {
           "type": "STRING",
           "value": "=>"
         },
@@ -3852,6 +3926,10 @@
       "try_expression",
       "range_expression",
       "ternary_expression"
+    ],
+    [
+      "_right_expression",
+      "arrow_function"
     ]
   ],
   "precedences": [],
