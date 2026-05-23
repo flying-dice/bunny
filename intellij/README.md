@@ -38,6 +38,8 @@ To iterate against a sandboxed IDE without packaging:
 ./gradlew runIde
 ```
 
+`runIde` launches a sandboxed **IntelliJ IDEA Ultimate** by default (that's the platform we build against). The packaged plugin still installs into WebStorm — IDEA Ultimate, WebStorm, PhpStorm, and GoLand share the same LSP API and platform module. To sandbox-launch WebStorm specifically, pass `-PrunIdeFromInstallation=/Applications/WebStorm.app` if you have it installed.
+
 ## Dev mode — point the LSP at a checkout
 
 Set `TSB_LSP_COMMAND` before launching WebStorm to use a repo-local LSP instead of the globally-linked one:

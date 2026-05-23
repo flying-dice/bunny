@@ -11,8 +11,11 @@ repositories { mavenCentral() }
 
 intellij {
   version.set(providers.gradleProperty("platformVersion"))
-  // WebStorm is required for the LSP API; the artifact name is `WS`.
-  type.set("WS")
+  // Build against IntelliJ IDEA Ultimate — it carries the LSP API and
+  // the produced plugin also runs in WebStorm / PhpStorm / GoLand. The
+  // Gradle plugin (`gradle-intellij-plugin` 1.x) doesn't accept `WS`
+  // as a type, so IU is the canonical target.
+  type.set("IU")
   // No third-party plugin dependencies — LSP API ships with the platform.
   plugins.set(listOf<String>())
 }
