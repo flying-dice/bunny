@@ -2,13 +2,7 @@
 
 > 🐰 A Rust-flavoured TypeScript dialect for Bun. `.tsb` files transpile to plain `.ts` — runtime has zero dependency on `@flying-dice/bunny`.
 
-Bunny adds **`struct`**, **`impl`**, **`match`**, and **`#[macro]` attributes** to TypeScript. The compiler transpiles `.tsb` → `.ts` and ships a small set of project-level assemblers that scan macro descriptors across files to emit:
-
-- a typed route table for `Bun.serve`
-- a typed `fetch` client matching the route signatures
-- a CLI dispatcher from `#[command]`-tagged functions
-- a typed event bus from `#[derive(Event)]` + `#[onEvent]`
-- an OpenAPI 3.1 spec
+Bunny adds **`struct`**, **`impl`**, **`match`**, and **`#[macro]` attributes** to TypeScript. The compiler transpiles `.tsb` → `.ts`, and each compiled file exports per-file consts (`routes`, `openapi`, `client`, `commands`, `listeners`) built from the macros in that file. You wire the app yourself by importing and spreading those consts in your `server.ts` / `cli.ts` — no project-wide assemblers, no generated wiring files, no runtime container.
 
 You write `.tsb`; bunny writes `.ts`. After codegen, your app has no runtime dependency on this package.
 
@@ -22,7 +16,7 @@ Requires Bun ≥ 1.3 and TypeScript ≥ 5.
 
 ## Hello, tsb
 
-`hello.tsb`:
+`controllers/Products.tsb`:
 
 ```tsb
 #[derive(Clone, Equals, ToJson)]
@@ -39,30 +33,59 @@ struct Product {
 export function getProduct(id: string): Product {
   return Product.new({ id, name: "Widget", priceCents: 250 });
 }
+
+#[post("/products")]
+export function createProduct(body: Product): Product {
+  return Product.new(body);
+}
 ```
 
 Compile it:
 
 ```bash
-bunny compile hello.tsb           # → hello.ts
+bunny build -s '**/*.tsb'
 ```
 
-`hello.ts` is plain TypeScript: a `type Product = { … }`, a `const Product = { new(data): …, clone(self): …, equals(a, b): …, toJson(self): … }`, the `getProduct` function, and a `__route_getProduct` descriptor the assemblers later harvest.
+`controllers/Products.ts` is plain TypeScript: a `type Product`, a `const Product` with `new` / `clone` / `equals` / `toJson` methods, the two route functions, and three per-file consts:
+
+- `export const routes` — `{ "/products/:id": { GET: (req) => … }, "/products": { POST: async (req) => … } }`
+- `export const openapi` — the OpenAPI fragment for those paths
+- `export const client` — typed fetch wrappers: `getProduct(id) → Promise<Product>` etc.
+
+Then in `server.ts` (you write this once):
+
+```ts
+import {
+  openapi as productsSpec,
+  routes as productsRoutes,
+} from "./controllers/Products.ts";
+
+Bun.serve({
+  port: 3000,
+  routes: { ...productsRoutes },
+});
+
+await Bun.write(
+  "openapi.json",
+  JSON.stringify({
+    openapi: "3.1.0",
+    info: { title: "Products API", version: "0.1.0" },
+    paths: { ...productsSpec },
+  }, null, 2),
+);
+```
+
+For more controllers, add more imports + more `...spreads`. No assembler step, no hidden generated files — the app's surface is whatever you spread.
 
 ## Commands
 
 ```
-bunny build    -s <glob>... [-w]            Compile every matching .tsb → sibling .ts.
-bunny compile  <file.tsb> [-o out.ts]       Transpile one file.
-bunny routes   -s <glob>... [-o routes.ts]  Emit a Bun.serve route table.
-bunny client   -s <glob>... [-o client.ts]  Emit a typed fetch client.
-bunny cli      -s <glob>... [-o cli-app.ts] Emit a CLI dispatcher from #[command].
-bunny events   -s <glob>... [-o bus.ts]     Emit a typed event bus.
-bunny openapi  -s <glob>... [-o spec.json]  Emit the OpenAPI 3.1 spec.
-bunny lsp                                   Stdio language server for editors.
+bunny build    -s <glob>... [-w]      Compile every matching .tsb to sibling .ts.
+bunny compile  <file.tsb> [-o out.ts] Transpile one file.
+bunny lsp                             Stdio language server (used by editors).
 ```
 
-Every command takes `--source`/`-s` (repeatable globs) and `--macro` (paths to user-authored macro modules). The output flag (`-o`) names the emitted file; the assemblers (`routes`, `client`, `cli`, `events`, `openapi`) also recompile their input `.tsb` files as a side-effect.
+`--source` / `-s` is repeatable; `--macro` loads user-authored macro modules; `--watch` re-runs `build` on change.
 
 ## Language features
 
@@ -170,6 +193,16 @@ Multiple `impl From<T>` blocks naming their method `from` collapse into a single
 
 ### Function-attribute macros
 
+Each macro contributes an entry to a per-file `export const` record. The user merges those records across files in their entry point.
+
+| Macro | Contributes to |
+| --- | --- |
+| `#[get/post/put/patch/delete/head/options("/path")]` | `routes` (Bun.serve table), `openapi` (3.1 path operation), `client` (typed fetch wrapper) |
+| `#[command("name", "description?")]` | `commands` (`{ name: { description, params, handler } }`) |
+| `#[derive(Event)]` (on a struct) | `events` (marker record naming the payload type) |
+| `#[onEvent("EventName")]` | `listeners` (`{ EventName: [handler, …] }`) |
+| `#[sql("query-name")]` | replaces the function body with a prepared-statement call against the `db` param |
+
 ```tsb
 #[get("/products/:id")]
 export function getProduct(id: string): Product { … }
@@ -183,16 +216,11 @@ export function addBook(isbn: string, title: string): void { … }
 #[sql("get-book-by-id")]
 export function getBookById(db: Database, id: string): Book | undefined {}
 
-#[onEvent(BookAdded)]
+#[onEvent("BookAdded")]
 export async function logBookAdded(event: BookAdded): Promise<void> { … }
 ```
 
-Each macro emits a sibling `__<kind>_<fn>` descriptor that the corresponding assembler harvests across the project.
-
-- `#[get/post/put/patch/delete/head/options(path)]` → harvested by `bunny routes`, `bunny client`, `bunny openapi`.
-- `#[command(name, description?)]` → harvested by `bunny cli`.
-- `#[sql(name)]` → reads `sql/<name>.sql` from the nearest `sql/` directory up the tree, rewrites `:name` placeholders to positional `?`, and chooses `.get/.all/.run` from the SQL kind and the function's return type. `RETURNING` clauses on mutations return the row.
-- `#[onEvent(EventName)]` → harvested by `bunny events`.
+`#[sql]` reads `sql/<name>.sql` from the nearest `sql/` directory up the tree, rewrites `:name` placeholders to positional `?`, and chooses `.get/.all/.run` from the SQL kind and the function's return type. `RETURNING` clauses on mutations return the row. The database connection is an explicit first parameter — no DI, no hidden state.
 
 ### User macros
 
@@ -225,10 +253,10 @@ Each example regenerates with `bun run example:<name>` and includes a runnable e
 
 | Example | Demonstrates |
 | --- | --- |
-| [`examples/api`](./examples/api/) | structs + derives, `#[get/post]`, `bunny routes`, `bunny openapi`, `Bun.serve` |
-| [`examples/cli`](./examples/cli/) | `#[command]`, `bunny cli`, `#[deep]` validation chaining (Isbn → AddBookDto → Book) |
-| [`examples/csr`](./examples/csr/) | api backend in `.tsb`, React frontend in `.tsx` consuming the generated `bunny client` |
-| [`examples/sql`](./examples/sql/) | `#[sql]` against `bun:sqlite`, including `RETURNING`-aware dispatch; events round-trip |
+| [`examples/api`](./examples/api/) | structs + derives, `#[get/post]`, per-controller `routes` + `openapi` merged in `server.ts` |
+| [`examples/cli`](./examples/cli/) | `#[command]`, per-file `commands` const + 30-line `cli.ts` dispatcher, `#[deep]` validation chain (Isbn → AddBookDto → Book) |
+| [`examples/csr`](./examples/csr/) | api backend in `.tsb`, React frontend imports the per-file `client` const for typed fetch |
+| [`examples/sql`](./examples/sql/) | `#[sql]` against `bun:sqlite` (incl. `RETURNING`); per-file `listeners` + 6-line bus in `run.ts` |
 | [`examples/ssr`](./examples/ssr/) | `.tsb` entities/services with `.tsx` controllers streaming HTML via `renderToReadableStream` |
 
 ## Editor support
@@ -243,7 +271,7 @@ Honest caveats:
 
 - The TextMate grammar reuses TypeScript's, so `struct`/`impl`/`match`/`#[…]` aren't highlighted as keywords. The LSP still provides completion and diagnostics.
 - The route adapter binds non-path params from the JSON body on POST/PUT/PATCH and from the query string elsewhere. There's no body-shape inference — the user's function signature is the contract.
-- `bunny routes` doesn't scan `.tsx`. SSR examples wire their controllers manually.
+- The macros emit per-file consts; cross-file merging is your responsibility (one line per import + spread). Adding a new controller means adding a new import to `server.ts`. If you'd rather have auto-discovery, write a glob-import in your entry — bunny's compiler doesn't do it for you on purpose.
 - `match` patterns cover literals, identifiers, and one-level discriminants — no nested destructuring or guard clauses yet.
 
 ## License

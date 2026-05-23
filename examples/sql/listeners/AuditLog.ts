@@ -4,5 +4,7 @@ export async function logBookAdded(event: BookAdded): Promise<void> {
   console.log(`[audit] book added: ${event.id} (${event.title})`);
 }
 
-export const __listener_logBookAdded: { event: string; handler: typeof logBookAdded } = { event: "BookAdded", handler: logBookAdded };
+export const listeners = {
+  "BookAdded": [logBookAdded],
+};
 //# sourceMappingURL=AuditLog.ts.map

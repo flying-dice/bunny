@@ -27,6 +27,25 @@ export interface MacroContext {
    * registering an entry in a project-wide table).
    */
   appendModule(text: string): void;
+  /**
+   * Accumulate an entry into a named record that the emitter outputs as
+   * a single `export const <recordName> = { ... };` at module end.
+   *
+   * `mode` controls multi-write semantics:
+   *  - `"object"` (default): values are object-literal fragments. Two
+   *    writes to the same outer key merge via shallow spread, so two
+   *    routes on the same path with different methods land as one
+   *    `{ GET: …, POST: … }` entry.
+   *  - `"array"`: values append into an array under the outer key —
+   *    used for listener handlers where many subscribers can share an
+   *    event name.
+   */
+  appendToRecord(
+    recordName: string,
+    entryKey: string,
+    entryValue: string,
+    mode?: "object" | "array"
+  ): void;
 }
 
 export interface MacroOutputContext extends MacroContext {

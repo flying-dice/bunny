@@ -1,27 +1,11 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Bunny API",
-    "version": "0.0.0"
+    "title": "Products API",
+    "version": "0.1.0"
   },
   "paths": {
     "/products": {
-      "post": {
-        "operationId": "createProduct",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "Successful response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Product"
-                }
-              }
-            }
-          }
-        }
-      },
       "get": {
         "operationId": "listProducts",
         "parameters": [],
@@ -35,6 +19,22 @@
                   "items": {
                     "$ref": "#/components/schemas/Product"
                   }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createProduct",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Product"
                 }
               }
             }

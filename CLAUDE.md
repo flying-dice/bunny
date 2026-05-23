@@ -40,7 +40,7 @@ Some things stay exact and complete. **Never** abbreviate or stylize these:
 | API names | Exact. `#[derive(Clone)]` stays `#[derive(Clone)]`. |
 | Type signatures | Exact. Never trim a type. |
 | Error / log messages | Quote verbatim. |
-| Commands | Exact: `bunny build`, `bunny routes`, `bunny client`. |
+| Commands | Exact: `bunny build`, `bunny compile`, `bunny lsp`. |
 | File paths, env vars | Exact. |
 | `tsdoc` doc comments | Full, normal English — see below. |
 | Legal, LICENSE, security notes | Complete and careful. |

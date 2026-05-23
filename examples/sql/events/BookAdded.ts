@@ -12,5 +12,7 @@ export const BookAdded = {
    return data; },
 };
 
-export const __event_BookAdded: { name: "BookAdded" } = { name: "BookAdded" };
+export const events = {
+  "BookAdded": { name: "BookAdded" },
+};
 //# sourceMappingURL=BookAdded.ts.map

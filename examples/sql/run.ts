@@ -1,17 +1,29 @@
 #!/usr/bin/env bun
 /**
- * Self-contained @sql demo. Compile + assemble with:
+ * Self-contained @sql + event-bus demo. Each listener module's compiled
+ * `.ts` exports a `listeners` const built from its `#[onEvent(...)]`
+ * macros. We merge them here and write a 6-line dispatcher in user
+ * code — bunny doesn't generate a bus module.
  *
- *   bun run example:sql
- *
- * which runs:
- *   bunny events -s '**\/*.tsb' -o bus.ts    # event bus from #[derive(Event)] + #[onEvent]
- *   (all .tsb files transpile to .ts during the events build above.)
+ *   bun run example:sql      # compile .tsb → .ts
+ *   bun examples/sql/run.ts  # run the demo
  */
 import { Database } from "bun:sqlite";
-import { findBookById, listBooks } from "./repositories/BookQueries.ts";
+import { listeners as auditListeners } from "./listeners/AuditLog.ts";
 import { insertBook, updateBookCopies } from "./repositories/BookMutations.ts";
-import { emit } from "./bus.ts";
+import { findBookById, listBooks } from "./repositories/BookQueries.ts";
+
+// ---- 6-line event bus, owned by user code ---------------------------------
+
+const listeners: Record<string, ((payload: any) => unknown)[]> = {
+  ...auditListeners,
+};
+
+async function emit<T>(event: string, payload: T): Promise<void> {
+  for (const h of listeners[event] ?? []) await h(payload);
+}
+
+// ---- demo ----------------------------------------------------------------
 
 const db = new Database(":memory:");
 db.run(`

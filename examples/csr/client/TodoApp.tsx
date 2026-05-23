@@ -1,12 +1,9 @@
 import { type FormEvent, useCallback, useEffect, useState } from "react";
-import {
-  BunnyClientError,
-  createTodo,
-  deleteTodo,
-  listTodos,
-  toggleTodo,
-} from "../client.ts";
+import { client as todos } from "../controllers/TodosController.ts";
 import type { Todo } from "../entities/Todo.ts";
+
+const { createTodo, deleteTodo, listTodos, toggleTodo } = todos;
+class BunnyClientError extends Error {}
 
 /**
  * Talks to the bunny-generated function-style client. Each controller

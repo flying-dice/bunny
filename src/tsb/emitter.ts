@@ -57,6 +57,12 @@ export function emit(
     chunks.push({ text, sourceOffset });
   };
   let moduleAppend = "";
+  // Records collected by macros via `ctx.appendToRecord`. Emitted as
+  // `export const <name> = { ... }` after every part has been processed.
+  const records = new Map<
+    string,
+    { mode: "object" | "array"; entries: Map<string, string[]> }
+  >();
   const ctx = {
     module,
     sourcePath: options.sourcePath,
@@ -65,6 +71,21 @@ export function emit(
     },
     appendModule(text: string): void {
       moduleAppend += (moduleAppend.length > 0 ? "\n" : "") + text;
+    },
+    appendToRecord(
+      recordName: string,
+      key: string,
+      value: string,
+      mode: "object" | "array" = "object"
+    ): void {
+      let rec = records.get(recordName);
+      if (!rec) {
+        rec = { mode, entries: new Map() };
+        records.set(recordName, rec);
+      }
+      const arr = rec.entries.get(key) ?? [];
+      arr.push(value);
+      rec.entries.set(key, arr);
     },
   };
 
@@ -142,6 +163,22 @@ export function emit(
     push("\n");
     push(moduleAppend);
     push("\n");
+  }
+
+  // Emit each accumulated record as a top-level const.
+  for (const [name, rec] of records) {
+    const entries: string[] = [];
+    for (const [key, values] of rec.entries) {
+      if (rec.mode === "array") {
+        entries.push(`  ${key}: [${values.join(", ")}]`);
+      } else if (values.length === 1) {
+        entries.push(`  ${key}: ${values[0]}`);
+      } else {
+        // Same outer key written multiple times → shallow object merge.
+        entries.push(`  ${key}: { ${values.map((v) => `...${v}`).join(", ")} }`);
+      }
+    }
+    push(`\nexport const ${name} = {\n${entries.join(",\n")},\n};\n`);
   }
 
   const ts = chunks.map((c) => c.text).join("");

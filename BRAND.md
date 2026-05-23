@@ -100,18 +100,15 @@ An Easter-adjacent palette kept tasteful and modern — fresh, not garish.
 
 ## CLI & Command Vocabulary
 
-Today's commands (see `bunny --help` for the full surface):
+Today's commands (see `bunny --help`):
 
 | Command | Action |
 |---------|--------|
 | `bunny build` | Compile every matching `.tsb` to sibling `.ts`. |
 | `bunny compile` | Transpile a single `.tsb` file. |
-| `bunny routes` | Emit a `Bun.serve` route table. |
-| `bunny client` | Emit a typed fetch client. |
-| `bunny cli` | Emit a CLI dispatcher from `#[command]`. |
-| `bunny events` | Emit a typed event bus. |
-| `bunny openapi` | Emit the OpenAPI 3.1 spec. |
 | `bunny lsp` | Stdio language server (Zed/VS Code extensions). |
+
+Routes, OpenAPI, fetch clients, CLI commands, and event listeners are emitted as **per-file `export const` records**. Users merge them in their own entry (`server.ts`, `cli.ts`, `run.ts`). No project-level assembler subcommands; no hidden generated wiring files.
 
 Future verbs (`nest`, `burrow`, `hop`) remain in the rabbit/spring vocabulary for scaffolding work yet to land.
 

@@ -44,9 +44,11 @@ export function statsAuthors(): void {
   for (const a of [...seen].sort()) console.log(a);
 }
 
-export const __command_addBook: { name: string; description: string; params: { name: string; type: string }[]; handler: typeof addBook } = { ...{"name":"add","description":"Add a book to the library","params":[{"name":"isbn","type":"string"},{"name":"title","type":"string"},{"name":"author","type":"string"},{"name":"copies","type":"number"}]}, handler: addBook };
-export const __command_listBooks: { name: string; description: string; params: { name: string; type: string }[]; handler: typeof listBooks } = { ...{"name":"list","description":"List every book on the shelf","params":[]}, handler: listBooks };
-export const __command_findBook: { name: string; description: string; params: { name: string; type: string }[]; handler: typeof findBook } = { ...{"name":"find","description":"Find a book by id","params":[{"name":"id","type":"string"}]}, handler: findBook };
-export const __command_statsCount: { name: string; description: string; params: { name: string; type: string }[]; handler: typeof statsCount } = { ...{"name":"stats:count","description":"Show the count of books on the shelf","params":[]}, handler: statsCount };
-export const __command_statsAuthors: { name: string; description: string; params: { name: string; type: string }[]; handler: typeof statsAuthors } = { ...{"name":"stats:authors","description":"List unique authors","params":[]}, handler: statsAuthors };
+export const commands = {
+  "add": { ...{"description":"Add a book to the library","params":[{"name":"isbn","type":"string"},{"name":"title","type":"string"},{"name":"author","type":"string"},{"name":"copies","type":"number"}]}, handler: addBook as (...args: any[]) => any },
+  "list": { ...{"description":"List every book on the shelf","params":[]}, handler: listBooks as (...args: any[]) => any },
+  "find": { ...{"description":"Find a book by id","params":[{"name":"id","type":"string"}]}, handler: findBook as (...args: any[]) => any },
+  "stats:count": { ...{"description":"Show the count of books on the shelf","params":[]}, handler: statsCount as (...args: any[]) => any },
+  "stats:authors": { ...{"description":"List unique authors","params":[]}, handler: statsAuthors as (...args: any[]) => any },
+};
 //# sourceMappingURL=BookCommands.ts.map

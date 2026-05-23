@@ -265,25 +265,44 @@ const routeMacros: FunctionAttrMacro[] = HTTP_VERBS.map((verb) => ({
   emit(ctx, { fn, attr }) {
     const rawPath = attr.argList[0] ?? "/";
     const method = verb.toUpperCase();
-    // Append a module-level route descriptor. Consumers (the user's
-    // entrypoint, or a bunny manifest emitter) collect these to build
-    // the route table. We include the parsed function-params so the
-    // routes-assembler can decide how to bind each one (path vs body).
-    const paramsForRoute = parseFunctionParams(fn.params).map((p) => ({
-      name: p.name,
-      type: p.type,
-    }));
-    ctx.appendModule(
-      `export const __route_${fn.name}: { method: ${JSON.stringify(method)}; path: ${JSON.stringify(rawPath)}; params: { name: string; type: string }[]; handler: typeof ${fn.name} } = { method: ${JSON.stringify(method)}, path: ${JSON.stringify(rawPath)}, params: ${JSON.stringify(paramsForRoute)}, handler: ${fn.name} };`
-    );
-
-    // Append an OpenAPI operation fragment that `bunny openapi` can
-    // collect across files. We map `:foo` path params to `{foo}` and
-    // pull each parameter's schema from the function signature.
     const params = parseFunctionParams(fn.params);
     const pathParamNames = [...rawPath.matchAll(/:([A-Za-z_][A-Za-z0-9_]*)/g)].map(
       (m) => m[1]!
     );
+    const pathParamSet = new Set(pathParamNames);
+    const hasBody = ["POST", "PUT", "PATCH"].includes(method);
+
+    // ---- routes (Bun.serve-ready handler) --------------------------------
+    // Build an inline adapter expression. Each function param binds as
+    // a path / body / query value; the adapter forwards them
+    // positionally to the user's typed handler.
+    const adapterArgs: string[] = [];
+    let bodyBound = false;
+    for (const p of params) {
+      if (pathParamSet.has(p.name)) {
+        adapterArgs.push(`(req as any).params?.${p.name}`);
+      } else if (hasBody && !bodyBound) {
+        adapterArgs.push(`(body as any)`);
+        bodyBound = true;
+      } else {
+        adapterArgs.push(
+          `new URL(req.url).searchParams.get(${JSON.stringify(p.name)}) ?? undefined`
+        );
+      }
+    }
+    const callExpr = `${fn.name}(${adapterArgs.join(", ")})`;
+    const responseExpr = `Response.json(${callExpr})`;
+    const adapter = bodyBound
+      ? `async (req: Request) => { const body = await req.json(); return ${responseExpr}; }`
+      : `(req: Request) => ${responseExpr}`;
+    ctx.appendToRecord(
+      "routes",
+      JSON.stringify(rawPath),
+      `{ ${method}: ${adapter} }`,
+      "object"
+    );
+
+    // ---- openapi (per-path operation object) ----------------------------
     const openApiPath = rawPath.replace(/:([A-Za-z_][A-Za-z0-9_]*)/g, "{$1}");
     const parameters = pathParamNames.map((n) => {
       const p = params.find((pp) => pp.name === n);
@@ -296,8 +315,6 @@ const routeMacros: FunctionAttrMacro[] = HTTP_VERBS.map((verb) => ({
     });
     const operation = {
       operationId: fn.name,
-      method,
-      path: openApiPath,
       parameters,
       responses: {
         "200": {
@@ -310,9 +327,75 @@ const routeMacros: FunctionAttrMacro[] = HTTP_VERBS.map((verb) => ({
         },
       },
     };
-    ctx.appendModule(
-      `export const __openapi_${fn.name} = ${JSON.stringify(operation)} as const;`
+    ctx.appendToRecord(
+      "openapi",
+      JSON.stringify(openApiPath),
+      `{ ${verb}: ${JSON.stringify(operation)} as const }`,
+      "object"
     );
+
+    // ---- client (typed fetch wrapper) -----------------------------------
+    // Build the request: path params interpolate into the URL; body
+    // params JSON-encode; remaining params append as query string. The
+    // generated function's arg + return types are inferred from the
+    // handler via `Parameters<typeof fn>` / `ReturnType<typeof fn>` so
+    // the client stays in lockstep with server changes.
+    const clientArgs: string[] = [];
+    const clientUrlParts: string[] = [];
+    const clientBodyName: string | undefined = undefined;
+    const clientQueryNames: string[] = [];
+    let urlBuilt = `"${rawPath}"`;
+    if (pathParamNames.length > 0) {
+      urlBuilt = "`" + rawPath + "`";
+      for (const n of pathParamNames) {
+        urlBuilt = urlBuilt.replace(
+          `:${n}`,
+          `\${encodeURIComponent(String(${n}))}`
+        );
+      }
+    }
+    let bodyArg: string | undefined;
+    let i = 0;
+    for (const p of params) {
+      const ty = `Parameters<typeof ${fn.name}>[${i}]`;
+      clientArgs.push(`${p.name}: ${ty}`);
+      if (pathParamSet.has(p.name)) {
+        // bound to URL
+      } else if (hasBody && !bodyArg) {
+        bodyArg = p.name;
+      } else {
+        clientQueryNames.push(p.name);
+      }
+      i++;
+    }
+    void clientUrlParts;
+    void clientBodyName;
+    const fetchInitParts: string[] = [`method: ${JSON.stringify(method)}`];
+    if (bodyArg) {
+      fetchInitParts.push(`headers: { "Content-Type": "application/json" }`);
+      fetchInitParts.push(`body: JSON.stringify(${bodyArg})`);
+    }
+    let urlExpr = urlBuilt;
+    if (clientQueryNames.length > 0) {
+      const qsBuild = clientQueryNames
+        .map(
+          (n) =>
+            `${JSON.stringify(n)}: ${n} as unknown`
+        )
+        .join(", ");
+      urlExpr = `\`${urlBuilt.startsWith("`") ? urlBuilt.slice(1, -1) : rawPath}\${(() => { const __q = new URLSearchParams(); const __o: Record<string, unknown> = { ${qsBuild} }; for (const [k, v] of Object.entries(__o)) if (v !== undefined && v !== null) __q.append(k, String(v)); const __s = __q.toString(); return __s ? "?" + __s : ""; })()}\``;
+    }
+    const clientReturn = `Promise<Awaited<ReturnType<typeof ${fn.name}>>>`;
+    const clientFn = `async (${clientArgs.join(", ")}): ${clientReturn} => {
+      const __res = await fetch(${urlExpr}, { ${fetchInitParts.join(", ")} });
+      if (!__res.ok) throw new Error(\`\${${JSON.stringify(method)}} \${${urlExpr}} failed: \${__res.status}\`);
+      if (__res.status === 204) return undefined as unknown as Awaited<ReturnType<typeof ${fn.name}>>;
+      const __t = await __res.text();
+      return (__t.length === 0 ? undefined : JSON.parse(__t)) as Awaited<ReturnType<typeof ${fn.name}>>;
+    }`;
+    ctx.appendToRecord("client", fn.name, clientFn, "object");
+
+    // The user's original function is kept verbatim by returning empty.
     return { replacement: "" };
   },
 }));
@@ -572,10 +655,16 @@ const deriveEvent: DeriveMacro = {
   kind: "derive",
   name: "Event",
   emit(ctx, { struct }) {
-    ctx.appendModule(
-      `export const __event_${struct.name}: { name: ${JSON.stringify(struct.name)} } = { name: ${JSON.stringify(struct.name)} };`
+    // `#[derive(Event)]` is a marker — the struct type IS the payload
+    // type, the listener side references it by name. No runtime const
+    // needed; we only register the struct as an event so user macros
+    // (or future tooling) can introspect it.
+    ctx.appendToRecord(
+      "events",
+      JSON.stringify(struct.name),
+      `{ name: ${JSON.stringify(struct.name)} }`,
+      "object"
     );
-    // Side-effect only — no method to add to the struct's impl block.
     return "";
   },
 };
@@ -589,8 +678,11 @@ const onEvent: FunctionAttrMacro = {
       ctx.error(`#[onEvent(...)] requires an event name`, attr.span);
       return { replacement: "" };
     }
-    ctx.appendModule(
-      `export const __listener_${fn.name}: { event: string; handler: typeof ${fn.name} } = { event: ${JSON.stringify(eventName)}, handler: ${fn.name} };`
+    ctx.appendToRecord(
+      "listeners",
+      JSON.stringify(eventName),
+      fn.name,
+      "array"
     );
     return { replacement: "" };
   },
@@ -610,15 +702,12 @@ const command: FunctionAttrMacro = {
       name: p.name,
       type: p.type,
     }));
-    const descriptor = {
-      name,
-      description,
-      params,
-    };
-    // Emit a module-level descriptor const that `bunny cli` harvests
-    // across all compiled files and weaves into a dispatcher.
-    ctx.appendModule(
-      `export const __command_${fn.name}: { name: string; description: string; params: { name: string; type: string }[]; handler: typeof ${fn.name} } = { ...${JSON.stringify(descriptor)}, handler: ${fn.name} };`
+    const meta = JSON.stringify({ description, params });
+    ctx.appendToRecord(
+      "commands",
+      JSON.stringify(name),
+      `{ ...${meta}, handler: ${fn.name} as (...args: any[]) => any }`,
+      "object"
     );
     return { replacement: "" };
   },

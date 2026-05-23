@@ -1,13 +1,8 @@
 #!/usr/bin/env bun
 import * as path from "node:path";
 import { parseArgs } from "node:util";
-import { buildCli } from "./tsb/cli-assembler.ts";
-import { buildClient } from "./tsb/client-assembler.ts";
 import { buildProject, compileFile } from "./tsb/compile.ts";
-import { buildEvents } from "./tsb/events-assembler.ts";
 import { runLsp } from "./tsb/lsp.ts";
-import { generateOpenApi } from "./tsb/openapi.ts";
-import { buildRoutes } from "./tsb/routes-assembler.ts";
 
 export interface RunCliOptions {
   argv?: string[];
@@ -16,9 +11,9 @@ export interface RunCliOptions {
 }
 
 /**
- * Entry point usable both from `bunx` and from tests. Returns the absolute
- * paths it wrote. Throws on configuration / generation errors; the binary
- * wraps this to render a clean error message.
+ * Entry point. Returns the absolute paths it wrote. Throws on
+ * configuration / compile errors; the binary wraps this to render a
+ * clean error message.
  */
 export async function runCli(opts: RunCliOptions = {}): Promise<string[]> {
   const argv = opts.argv ?? process.argv.slice(2);
@@ -34,9 +29,8 @@ export async function runCli(opts: RunCliOptions = {}): Promise<string[]> {
   const cmd = positionals[0];
   const macroModules = (values.macro ?? []).map((p: string) => path.resolve(cwd, p));
   const sourceGlobs = values.source ?? [];
-  const output = values["out-dir"];
 
-  // `bunny lsp` — stdio language server for the Zed/VS Code extensions.
+  // `bunny lsp` — stdio language server for editor extensions.
   if (cmd === "lsp") {
     await runLsp();
     return [];
@@ -62,7 +56,7 @@ export async function runCli(opts: RunCliOptions = {}): Promise<string[]> {
     }
     const result = await compileFile({
       input: path.resolve(cwd, input),
-      output: output ? path.resolve(cwd, output) : undefined,
+      output: values["out-dir"] ? path.resolve(cwd, values["out-dir"]) : undefined,
       macroModules,
     });
     for (const d of result.diagnostics) {
@@ -70,44 +64,6 @@ export async function runCli(opts: RunCliOptions = {}): Promise<string[]> {
     }
     log(`wrote ${path.relative(cwd, result.outputPath) || result.outputPath}`);
     return [result.outputPath];
-  }
-
-  // `bunny cli` — emit a CLI dispatcher from #[command] descriptors.
-  if (cmd === "cli") {
-    requireSource(sourceGlobs);
-    return [await buildCli({ sourceGlobs, cwd, macroModules, output, log })];
-  }
-
-  // `bunny routes` — emit a Bun.serve route table from #[get/post/...].
-  if (cmd === "routes") {
-    requireSource(sourceGlobs);
-    return [await buildRoutes({ sourceGlobs, cwd, macroModules, output, log })];
-  }
-
-  // `bunny client` — emit a typed fetch client from #[get/post/...].
-  if (cmd === "client") {
-    requireSource(sourceGlobs);
-    return [await buildClient({ sourceGlobs, cwd, macroModules, output, log })];
-  }
-
-  // `bunny events` — emit a typed pub/sub bus.
-  if (cmd === "events") {
-    requireSource(sourceGlobs);
-    return [await buildEvents({ sourceGlobs, cwd, macroModules, output, log })];
-  }
-
-  // `bunny openapi` — emit the OpenAPI 3.1 document.
-  if (cmd === "openapi") {
-    requireSource(sourceGlobs);
-    const doc = await generateOpenApi({
-      sourceGlobs,
-      cwd,
-      macroModules,
-      output,
-      log,
-    });
-    if (!output) log(JSON.stringify(doc, null, 2));
-    return output ? [path.resolve(cwd, output)] : [];
   }
 
   throw new Error(`bunny: unknown command "${cmd}"\n\n${USAGE}`);
@@ -150,28 +106,26 @@ function parse(argv: string[]): { values: CliValues; positionals: string[] } {
 }
 
 // ---------------------------------------------------------------------------
-// Usage
-// ---------------------------------------------------------------------------
 
 const USAGE = `\
 Usage: bunny <command> [flags]
 
 Commands:
-  build    -s <glob>... [-w]            Compile every matching .tsb to sibling .ts.
-  compile  <file.tsb> [-o out.ts]       Transpile a single .tsb file.
-  routes   -s <glob>... [-o routes.ts]  Emit a Bun.serve route table.
-  cli      -s <glob>... [-o cli-app.ts] Emit a CLI dispatcher from #[command].
-  client   -s <glob>... [-o client.ts]  Emit a typed fetch client from #[get/post/...].
-  events   -s <glob>... [-o bus.ts]     Emit a typed event bus from #[derive(Event)] + #[onEvent].
-  openapi  -s <glob>... [-o spec.json]  Emit the OpenAPI 3.1 spec.
-  lsp                                   Stdio language server (used by editors).
+  build    -s <glob>... [-w]      Compile every matching .tsb to sibling .ts.
+  compile  <file.tsb> [-o out.ts] Transpile a single .tsb file.
+  lsp                             Stdio language server (used by editors).
 
 Flags:
   -h, --help                  Show this message.
   -s, --source <glob>         Source glob(s). Repeat for multiple.
-  -o, --out-dir <path>        Output path (semantics differ per command).
-  -w, --watch                 Watch sources and rebuild on change (build only).
+  -o, --out-dir <path>        Output path for \`compile\`.
+  -w, --watch                 Watch sources and rebuild on change.
       --macro <path>          Load user-authored macros from this module. Repeatable.
+
+Wiring (routes / commands / events / openapi / client): each compiled
+.ts exports per-file \`routes\`, \`openapi\`, \`client\`, \`commands\`,
+or \`listeners\` consts. Import them in your own server.ts / cli.ts and
+spread them together — no separate assembler step.
 `;
 
 // ---------------------------------------------------------------------------
