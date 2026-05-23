@@ -279,6 +279,29 @@ interface WorkspaceSymbol {
    * and call sites.
    */
   structFields?: StructFieldSig[];
+  /**
+   * For trait `impl Trait for X` blocks: the trait being implemented.
+   * Surfaces as `containerName` on the `workspace/symbol` response.
+   * Undefined for inherent impls.
+   */
+  traitName?: string;
+}
+
+/**
+ * Workspace-symbol payload returned on `workspace/symbol`. Distinct
+ * from the in-memory `WorkspaceSymbol` harvested by `harvestSymbols`:
+ * this matches the LSP wire shape exactly so the editor's global
+ * symbol picker can render it without further transformation.
+ */
+export interface LspWorkspaceSymbol {
+  name: string;
+  kind: SymbolKindValue;
+  location: { uri: string; range: Range };
+  containerName?: string;
+}
+
+interface WorkspaceSymbolParams {
+  query: string;
 }
 
 interface TraitMethodSig {
@@ -339,6 +362,7 @@ export async function runLsp(): Promise<void> {
           definitionProvider: true,
           codeActionProvider: { codeActionKinds: ["quickfix"] },
           documentSymbolProvider: true,
+          workspaceSymbolProvider: true,
           referencesProvider: true,
           renameProvider: { prepareProvider: true },
           signatureHelpProvider: { triggerCharacters: ["(", ","] },
@@ -406,6 +430,11 @@ export async function runLsp(): Promise<void> {
       const p = msg.params as { textDocument: { uri: string } };
       const doc = docs.get(p.textDocument.uri);
       respond(msg.id!, doc ? documentSymbolsFor(doc) : []);
+      return;
+    }
+    if (msg.method === "workspace/symbol") {
+      const p = msg.params as WorkspaceSymbolParams;
+      respond(msg.id!, workspaceSymbolsFor(p.query ?? "", workspaceSymbols));
       return;
     }
     if (msg.method === "textDocument/references") {
@@ -521,6 +550,7 @@ async function harvestSymbols(
     const doc = extractDocBefore(text, part.span.start);
     const traitMethods = part.kind === "trait" ? collectTraitMethodSigs(part, text) : undefined;
     const structFields = part.kind === "struct" ? collectStructFieldSigs(part, text) : undefined;
+    const traitName = part.kind === "impl" ? part.traitName : undefined;
     out.set(key, {
       name: part.name,
       kind: part.kind,
@@ -530,6 +560,7 @@ async function harvestSymbols(
       doc,
       traitMethods,
       structFields,
+      traitName,
     });
   }
 }
@@ -1576,6 +1607,47 @@ function selectionRangeForName(text: string, span: M.Span, name: string): Range 
   if (rel < 0) return offsetsToRange(text, span.start, span.end);
   const start = span.start + rel;
   return offsetsToRange(text, start, start + name.length);
+}
+
+// ----------------------------------------------------------------------------
+// Workspace symbol
+// ----------------------------------------------------------------------------
+
+/**
+ * Filter the workspace symbol index for `workspace/symbol`. Case-
+ * insensitive substring match on the symbol name. An empty query
+ * returns every harvested symbol — clients use that to populate the
+ * picker on first open.
+ *
+ * Impl entries set `containerName` to the trait being implemented
+ * (`impl Display for Point` → `containerName: "Display"`); inherent
+ * impls leave it undefined so the picker just shows the struct name.
+ */
+export function workspaceSymbolsFor(
+  query: string,
+  workspace: ReadonlyMap<string, WorkspaceSymbol>,
+): LspWorkspaceSymbol[] {
+  const needle = query.toLowerCase();
+  const out: LspWorkspaceSymbol[] = [];
+  for (const sym of workspace.values()) {
+    if (needle && !sym.name.toLowerCase().includes(needle)) continue;
+    out.push({
+      name: sym.name,
+      kind: workspaceSymbolKind(sym.kind),
+      location: { uri: sym.uri, range: sym.range },
+      containerName: sym.kind === "impl" ? sym.traitName : undefined,
+    });
+  }
+  return out;
+}
+
+function workspaceSymbolKind(kind: WorkspaceSymbol["kind"]): SymbolKindValue {
+  switch (kind) {
+    case "struct": return SymbolKind.Struct;
+    case "trait": return SymbolKind.Interface;
+    case "function": return SymbolKind.Function;
+    case "impl": return SymbolKind.Class;
+  }
 }
 
 // ----------------------------------------------------------------------------
