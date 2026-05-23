@@ -6,16 +6,15 @@
  *   - `initialize` / `initialized` / `shutdown` / `exit`
  *   - `textDocument/didOpen` + `didChange` + `didClose` (full sync)
  *   - `textDocument/publishDiagnostics` from the neoc parser/emitter
- *   - `textDocument/completion` — keywords, derive macros, route macros,
- *     constraint macros, struct names visible in the current file
+ *   - `textDocument/completion` — Lua + neoc keywords, derive and
+ *     constraint macros, struct / trait / function names visible in
+ *     the workspace, struct fields via `self.` / `Self.` / `<param>.`
  *   - `textDocument/hover` — shows the declaration text under the cursor
  *     for structs / impls / functions / macros
  *   - `textDocument/definition` — jumps to the declaration site of a
  *     struct or function reference
- *
- * Volar integration is the longer-term plan (for ts-language-service
- * features against the lowered output); this native impl gives editors
- * a useful surface without that dependency.
+ *   - `textDocument/codeAction` — quick-fix that stubs every missing
+ *     required method on an `impl Trait for X { }` block.
  */
 
 import { readFileSync } from "node:fs";
@@ -524,9 +523,8 @@ const KEYWORDS = [
   // Lua literals + operators
   "nil", "true", "false", "and", "or", "not",
 ];
-const DERIVE_NAMES = ["Clone", "Equals", "ToJson", "Display", "Default", "Hash"];
-const CONSTRAINT_MACROS = ["minLength", "maxLength", "minimum", "maximum", "format", "pattern"];
-const ROUTE_MACROS = ["get", "post", "put", "patch", "delete", "head", "options"];
+const DERIVE_NAMES = ["Clone", "Equals", "ToTable", "Display"];
+const CONSTRAINT_MACROS = ["minLength", "maxLength", "minimum", "maximum", "pattern"];
 
 interface CompletionItem {
   label: string;
@@ -594,10 +592,12 @@ function completionsAt(
     return { isIncomplete: false, items };
   }
 
-  // Inside `#[…]` (attribute slot): suggest constraint + route macros.
+  // Inside `#[…]` (attribute slot): suggest field-constraint macros
+  // and the `derive` invocation. Function-attribute macros aren't
+  // bundled today; suggestions come from any user-loaded macros via
+  // the live registry once that pipe is wired.
   if (/#\[[^\]\n]*$/.test(before)) {
     for (const n of CONSTRAINT_MACROS) items.push({ label: n, kind: 3 /* Function */, detail: "field constraint" });
-    for (const n of ROUTE_MACROS) items.push({ label: n, kind: 3, detail: "http route" });
     items.push({ label: "derive", kind: 3, detail: "derive macros" });
     return { isIncomplete: false, items };
   }
@@ -958,26 +958,16 @@ function describePart(p: M.ModulePart): string {
 interface Hover { contents: { kind: "markdown"; value: string }; range?: Range }
 
 const MACRO_DOCS: Record<string, string> = {
-  derive: "Derive macros append generated methods (e.g. `clone`, `equals`) to the impl.",
-  minLength: "Field constraint: `string.length >= n`.",
-  maxLength: "Field constraint: `string.length <= n`.",
-  minimum: "Field constraint: `number >= n`.",
-  maximum: "Field constraint: `number <= n`.",
-  format: "Field constraint: value must match the named format (uuid, email, …).",
-  pattern: "Field constraint: value must match the supplied regex pattern.",
-  get: "Function attribute: registers an HTTP GET route at the given path.",
-  post: "Function attribute: registers an HTTP POST route at the given path.",
-  put: "Function attribute: registers an HTTP PUT route at the given path.",
-  patch: "Function attribute: registers an HTTP PATCH route at the given path.",
-  delete: "Function attribute: registers an HTTP DELETE route at the given path.",
-  head: "Function attribute: registers an HTTP HEAD route at the given path.",
-  options: "Function attribute: registers an HTTP OPTIONS route at the given path.",
-  Clone: "Derive: emits `clone(self) -> Self`.",
-  Equals: "Derive: emits `equals(a, b) -> boolean`.",
-  ToJson: "Derive: emits `toJson(self)` and `fromJson(s)`.",
-  Display: "Derive: emits `toString(self) -> string`.",
-  Default: "Derive: emits `default() -> Self` using zero-values or `#[default]` attrs.",
-  Hash: "Derive: emits `hash(self) -> string` using a stable JSON-FNV mix.",
+  derive: "Derive macros append generated functions (e.g. `Foo.clone`, `Foo.equals`) to the struct's Lua table.",
+  minLength: "Field constraint: `#data.<field> >= n`. Throws on shorter strings.",
+  maxLength: "Field constraint: `#data.<field> <= n`. Throws on longer strings.",
+  minimum: "Field constraint: `data.<field> >= n`. Throws on smaller numbers.",
+  maximum: "Field constraint: `data.<field> <= n`. Throws on larger numbers.",
+  pattern: "Field constraint: `string.match(data.<field>, pattern)` must be truthy.",
+  Clone: "Derive: emits `function Foo.clone(self)` returning a deep copy with metatable preserved.",
+  Equals: "Derive: emits `function Foo.equals(a, b)` returning structural equality across every declared field.",
+  ToTable: "Derive: emits `function Foo.toTable(self)` returning a plain Lua table (no metatable, no methods).",
+  Display: "Derive: emits `function Foo.display(self)` returning a human-readable `Foo { field=value, … }` string.",
 };
 
 function hoverAt(
