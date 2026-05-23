@@ -11,11 +11,13 @@ export function getProduct(id: string): Product | undefined {
 }
 
 export function createProduct(body: CreateProductDto): Product {
-  return products.create(CreateProductDto.new(body));
+  // `body` is already validated by the `#[post]` macro at the route
+  // boundary — trust it. No second `.new(...)` here.
+  return products.create(body);
 }
 
 export const routes = {
-  "/products": { ...{ GET: (req: Request) => Response.json(listProducts()) }, ...{ POST: async (req: Request) => { const body = await req.json(); return Response.json(createProduct((body as any))); } } },
+  "/products": { ...{ GET: (req: Request) => Response.json(listProducts()) }, ...{ POST: async (req: Request) => { const body = await req.json(); return Response.json(createProduct(CreateProductDto.new(body as any))); } } },
   "/products/:id": { GET: (req: Request) => Response.json(getProduct((req as any).params?.id)) },
 };
 

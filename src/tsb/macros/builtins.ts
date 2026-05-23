@@ -282,7 +282,18 @@ const routeMacros: FunctionAttrMacro[] = HTTP_VERBS.map((verb) => ({
       if (pathParamSet.has(p.name)) {
         adapterArgs.push(`(req as any).params?.${p.name}`);
       } else if (hasBody && !bodyBound) {
-        adapterArgs.push(`(body as any)`);
+        // Validate the JSON body at the route boundary so the handler
+        // can trust its typed parameter. If the param's declared type
+        // is a struct (single UpperCamel identifier, not a primitive),
+        // emit `Type.new(body as any)` — the generated `.new` runs the
+        // struct's field-constraint checks. Otherwise fall back to a
+        // typed cast (still untrusted, but at least narrowed in TS).
+        const ty = p.type.trim();
+        if (isLikelyStructType(ty)) {
+          adapterArgs.push(`${ty}.new(body as any)`);
+        } else {
+          adapterArgs.push(`(body as ${ty || "any"})`);
+        }
         bodyBound = true;
       } else {
         adapterArgs.push(
@@ -405,6 +416,16 @@ const routeMacros: FunctionAttrMacro[] = HTTP_VERBS.map((verb) => ({
  * parens) into `{ name, type }` pairs. Depth-aware on `<>`, `()`, `[]`,
  * `{}` so generics and inline types don't break commas.
  */
+// A parameter type that looks like a single struct name — UpperCamel
+// identifier, no unions, generics, or punctuation. Route macros use
+// this to decide whether they can validate the JSON body via the
+// struct's generated `.new`. Primitive TS types (`string`, `number`,
+// …) deliberately fail the test even though they start lowercase —
+// they have no `.new` constructor.
+function isLikelyStructType(t: string): boolean {
+  return /^[A-Z][A-Za-z0-9_]*$/.test(t);
+}
+
 function parseFunctionParams(raw: string): { name: string; type: string }[] {
   const parts: string[] = [];
   let depth = 0;
