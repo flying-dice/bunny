@@ -41,11 +41,46 @@ interface LspDiagnostic {
   severity: 1 | 2 | 3 | 4;
   source: "tsb";
   message: string;
+  /** Stable diagnostic ID. Code actions match on this. */
+  code?: string;
+  /** Free-form payload attached to the diagnostic for code-action use. */
+  data?: unknown;
 }
 
 interface PublishDiagnosticsParams {
   uri: string;
   diagnostics: LspDiagnostic[];
+}
+
+interface CodeActionParams {
+  textDocument: { uri: string };
+  range: Range;
+  context: { diagnostics: LspDiagnostic[] };
+}
+
+interface TextEdit { range: Range; newText: string }
+
+interface WorkspaceEdit {
+  changes: Record<string, TextEdit[]>;
+}
+
+interface CodeAction {
+  title: string;
+  kind: "quickfix";
+  diagnostics?: LspDiagnostic[];
+  edit?: WorkspaceEdit;
+  isPreferred?: boolean;
+}
+
+interface MissingTraitMethodsData {
+  implName: string;
+  implSpan: { start: number; end: number };
+  missing: Array<{
+    name: string;
+    signature: string;
+    isAsync: boolean;
+    hasDefault: boolean;
+  }>;
 }
 
 interface DocState {
@@ -117,6 +152,7 @@ export async function runLsp(): Promise<void> {
           completionProvider: { triggerCharacters: ["#", "[", "(", "@", ":", " "] },
           hoverProvider: true,
           definitionProvider: true,
+          codeActionProvider: { codeActionKinds: ["quickfix"] },
         },
         serverInfo: { name: "bunny tsb", version: "0.1.0" },
       });
@@ -133,7 +169,7 @@ export async function runLsp(): Promise<void> {
     if (msg.method === "textDocument/didOpen") {
       const p = msg.params as { textDocument: { uri: string; text: string } };
       await setDoc(docs, p.textDocument.uri, p.textDocument.text);
-      await publishDiagnostics(p.textDocument.uri, p.textDocument.text);
+      await publishDiagnostics(p.textDocument.uri, p.textDocument.text, docs, workspaceSymbols);
       return;
     }
     if (msg.method === "textDocument/didChange") {
@@ -143,7 +179,7 @@ export async function runLsp(): Promise<void> {
       // Refresh the workspace entry for this file so newly-declared
       // structs / functions show up in other open documents' completions.
       updateWorkspaceSymbolsForFile(p.textDocument.uri, text, workspaceSymbols);
-      await publishDiagnostics(p.textDocument.uri, text);
+      await publishDiagnostics(p.textDocument.uri, text, docs, workspaceSymbols);
       return;
     }
     if (msg.method === "textDocument/didClose") {
@@ -169,6 +205,12 @@ export async function runLsp(): Promise<void> {
       const p = msg.params as { textDocument: { uri: string }; position: Position };
       const doc = docs.get(p.textDocument.uri);
       respond(msg.id!, doc ? definitionAt(doc, p.position, p.textDocument.uri, workspaceSymbols) : null);
+      return;
+    }
+    if (msg.method === "textDocument/codeAction") {
+      const p = msg.params as CodeActionParams;
+      const doc = docs.get(p.textDocument.uri);
+      respond(msg.id!, doc ? codeActionsAt(doc, p, workspaceSymbols) : []);
       return;
     }
 
@@ -347,7 +389,12 @@ function cleanBlockDoc(body: string): string {
     .trim();
 }
 
-async function publishDiagnostics(uri: string, text: string): Promise<void> {
+async function publishDiagnostics(
+  uri: string,
+  text: string,
+  docs: Map<string, DocState>,
+  workspace: ReadonlyMap<string, WorkspaceSymbol>,
+): Promise<void> {
   let diagnostics: LspDiagnostic[] = [];
   try {
     const result = await transpile(text);
@@ -365,8 +412,64 @@ async function publishDiagnostics(uri: string, text: string): Promise<void> {
       message: err instanceof Error ? err.message : String(err),
     }];
   }
+  const docState = docs.get(uri);
+  if (docState) {
+    diagnostics.push(...missingTraitMethodDiagnostics(docState, workspace));
+  }
   const params: PublishDiagnosticsParams = { uri, diagnostics };
   notify("textDocument/publishDiagnostics", params);
+}
+
+// One warning per `impl Trait for X { … }` block that's missing any
+// required trait methods. The diagnostic carries `data` describing
+// every missing signature so a code-action handler can stub them in
+// without re-resolving the trait.
+function missingTraitMethodDiagnostics(
+  doc: DocState,
+  workspace: ReadonlyMap<string, WorkspaceSymbol>,
+): LspDiagnostic[] {
+  if (!doc.module) return [];
+  const out: LspDiagnostic[] = [];
+  for (const part of doc.module.parts) {
+    if (part.kind !== "impl" || !part.traitName) continue;
+    const methods = resolveTraitMethods(part.traitName, doc, workspace);
+    if (!methods) continue;
+    const implemented = new Set(part.methods.map((m) => m.name));
+    const missing = methods.filter((m) => !implemented.has(m.name));
+    if (missing.length === 0) continue;
+    // Range covers the impl header only — the `impl Trait for X {`
+    // line — so the squiggle is anchored to the declaration.
+    const head = doc.text.slice(part.span.start, part.span.end);
+    const braceRel = head.indexOf("{");
+    const headEnd = braceRel >= 0 ? part.span.start + braceRel + 1 : part.span.end;
+    out.push({
+      range: offsetsToRange(doc.text, part.span.start, headEnd),
+      severity: 2 /* Warning */,
+      source: "tsb",
+      message: missingMessage(part.traitName, missing),
+      code: "tsb/missing-trait-methods",
+      data: {
+        implName: part.name,
+        implSpan: part.span,
+        missing: missing.map((m) => ({
+          name: m.name,
+          signature: m.signature,
+          isAsync: m.isAsync,
+          hasDefault: m.hasDefault,
+        })),
+      },
+    });
+  }
+  return out;
+}
+
+function missingMessage(traitName: string, missing: TraitMethodSig[]): string {
+  const required = missing.filter((m) => !m.hasDefault).map((m) => m.name);
+  const optional = missing.filter((m) => m.hasDefault).map((m) => m.name);
+  const parts: string[] = [];
+  if (required.length > 0) parts.push(`missing required: ${required.join(", ")}`);
+  if (optional.length > 0) parts.push(`available defaults: ${optional.join(", ")}`);
+  return `impl ${traitName} — ${parts.join("; ")}`;
 }
 
 // ----------------------------------------------------------------------------
@@ -703,6 +806,71 @@ function hoverMarkdown(signature: string, doc: string | undefined): string {
 // ----------------------------------------------------------------------------
 
 interface Location { uri: string; range: Range }
+
+// ----------------------------------------------------------------------------
+// Code actions
+// ----------------------------------------------------------------------------
+
+function codeActionsAt(
+  doc: DocState,
+  params: CodeActionParams,
+  _workspace: ReadonlyMap<string, WorkspaceSymbol>,
+): CodeAction[] {
+  const out: CodeAction[] = [];
+  for (const diag of params.context.diagnostics) {
+    if (diag.code !== "tsb/missing-trait-methods") continue;
+    const data = diag.data as MissingTraitMethodsData | undefined;
+    if (!data) continue;
+    out.push(buildImplementMissingAction(doc, params.textDocument.uri, diag, data));
+  }
+  return out;
+}
+
+function buildImplementMissingAction(
+  doc: DocState,
+  uri: string,
+  diag: LspDiagnostic,
+  data: MissingTraitMethodsData,
+): CodeAction {
+  // Insert right before the impl block's closing brace. Walk back
+  // from impl.span.end to find the `}` so we land in the right slot
+  // even if there's trailing whitespace inside the source range.
+  const text = doc.text;
+  let insertAt = data.implSpan.end;
+  while (insertAt > 0 && text[insertAt - 1] !== "}") insertAt--;
+  if (insertAt > 0) insertAt -= 1; // position of `}`
+  const indent = "  ";
+  const body = data.missing
+    .map((m) => renderMethodStub(m, data.implName, indent))
+    .join("\n");
+  // If the block isn't empty, separate from the last method with a blank line.
+  const blockHead = text.slice(data.implSpan.start, insertAt);
+  const lastChar = blockHead.replace(/\s+$/, "").slice(-1);
+  const lead = lastChar === "{" ? "\n" : "\n\n";
+  const newText = `${lead}${body}\n`;
+  const insertPos = offsetToPosition(text, insertAt);
+  const edit: TextEdit = { range: { start: insertPos, end: insertPos }, newText };
+  return {
+    title: `Implement missing methods (${data.missing.length})`,
+    kind: "quickfix",
+    diagnostics: [diag],
+    edit: { changes: { [uri]: [edit] } },
+    isPreferred: true,
+  };
+}
+
+function renderMethodStub(
+  m: { name: string; signature: string; isAsync: boolean; hasDefault: boolean },
+  implName: string,
+  indent: string,
+): string {
+  const sig = m.signature.replace(/\bSelf\b/g, implName);
+  const asyncPrefix = m.isAsync ? "async " : "";
+  const todo = m.hasDefault
+    ? `${indent}${indent}// TODO override default for ${m.name}`
+    : `${indent}${indent}throw new Error("${m.name} not implemented");`;
+  return `${indent}${asyncPrefix}${m.name}${sig} {\n${todo}\n${indent}}`;
+}
 
 function definitionAt(
   doc: DocState,
