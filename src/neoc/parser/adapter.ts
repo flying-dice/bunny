@@ -11,7 +11,19 @@
 import * as M from "../ast/index.ts";
 import type * as N from "../ast/nodes.generated.ts";
 import { lowerBody } from "./lower-match.ts";
+import { lowerTry } from "./lower-try.ts";
 import { parseToAst } from "./tree-sitter.ts";
+
+// Body rewrites compose by running each pass over the body text
+// independently and feeding the next pass the post-rewrite source.
+// match and try both anchor their splices to original AST positions,
+// so a body that mixes them needs care — neither pass walks the
+// other's output. Match runs first; try slots its locals in around
+// the IIFE that match emitted.
+function lowerAll(body: N.StatementBlockNode): string {
+  const afterMatch = lowerBody(body, body.text);
+  return lowerTry(body, afterMatch);
+}
 
 export async function parseViaTreeSitter(source: string): Promise<M.ParseResult> {
   const root = await parseToAst(source);
@@ -210,7 +222,7 @@ function convertImplMethod(node: N.ImplMethodNode): M.ImplMethod {
     signature,
     params,
     returnType,
-    body: lowerBody(node.body, node.body.text),
+    body: lowerAll(node.body),
     attrs,
     isAsync: node.text.startsWith("async"),
     span: { start: node.startIndex, end: node.endIndex },
@@ -248,7 +260,7 @@ function convertTraitMethod(node: N.TraitMethodNode): M.TraitMethod {
     signature,
     params,
     returnType,
-    body: node.body ? lowerBody(node.body, node.body.text) : undefined,
+    body: node.body ? lowerAll(node.body) : undefined,
     attrs: [],
     isAsync: node.text.startsWith("async"),
     span: { start: node.startIndex, end: node.endIndex },
@@ -271,7 +283,7 @@ function convertFunction(
     signature,
     params,
     returnType,
-    body: lowerBody(node.body, node.body.text),
+    body: lowerAll(node.body),
     attrs: pendingAttrs,
     isAsync: node.text.includes("async"),
     span: { start: node.startIndex, end: node.endIndex },

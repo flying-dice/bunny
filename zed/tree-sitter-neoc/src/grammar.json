@@ -1,6 +1,6 @@
 {
   "$schema": "https://tree-sitter.github.io/tree-sitter/assets/schemas/grammar.schema.json",
-  "name": "tsb",
+  "name": "neoc",
   "word": "identifier",
   "rules": {
     "source_file": {
@@ -2130,6 +2130,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "try_expression"
+        },
+        {
+          "type": "SYMBOL",
           "name": "binary_expression"
         },
         {
@@ -2193,6 +2197,23 @@
           "name": "undefined_literal"
         }
       ]
+    },
+    "try_expression": {
+      "type": "PREC",
+      "value": 12,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "SYMBOL",
+            "name": "_right_expression"
+          },
+          {
+            "type": "STRING",
+            "value": "?"
+          }
+        ]
+      }
     },
     "match_expression": {
       "type": "SEQ",
@@ -3770,6 +3791,16 @@
     [
       "object_literal",
       "statement_block"
+    ],
+    [
+      "try_expression",
+      "ternary_expression",
+      "unary_expression"
+    ],
+    [
+      "try_expression",
+      "ternary_expression",
+      "binary_expression"
     ]
   ],
   "precedences": [],

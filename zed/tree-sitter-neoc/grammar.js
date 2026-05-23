@@ -44,6 +44,13 @@ module.exports = grammar({
     // requires looking at what's inside the braces; trees-sitter
     // wants the GLR hint.
     [$.object_literal, $.statement_block],
+    // `foo?` could either be a try_expression or the start of a
+    // ternary `foo ? a : b`. GLR picks whichever leads to a complete
+    // parse — when no `:` follows, try wins. The unary / binary
+    // operators join the conflict because reaching the trailing `?`
+    // crosses their inner `_right_expression` branch.
+    [$.try_expression, $.ternary_expression, $.unary_expression],
+    [$.try_expression, $.ternary_expression, $.binary_expression],
   ],
 
   rules: {
@@ -428,6 +435,7 @@ module.exports = grammar({
     _right_expression: $ => choice(
       $.match_expression,
       $.ternary_expression,
+      $.try_expression,
       $.binary_expression,
       $.unary_expression,
       $.call_expression,
@@ -445,6 +453,20 @@ module.exports = grammar({
       $.null_literal,
       $.undefined_literal,
     ),
+
+    // ----- try (postfix `?`) expression -----------------------------
+    //
+    // `expr?` — Rust-style early-return on `Err`. Binds tighter than
+    // the ternary `cond ? then : else` so that `foo()? : bar` always
+    // parses as a try followed by a syntax error rather than an
+    // ambiguous ternary. Tree-sitter's GLR still tries the ternary
+    // branch when a `:` follows; the precedence below tips the
+    // decision toward `try_expression` whenever the trailing `:` is
+    // absent.
+    try_expression: $ => prec(12, seq(
+      $._right_expression,
+      '?',
+    )),
 
     // ----- match expression -----------------------------------------
 
