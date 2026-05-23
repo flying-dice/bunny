@@ -6,6 +6,7 @@
 import * as path from "node:path";
 import * as os from "node:os";
 import { transpile } from "./compiler.ts";
+import { formatSource } from "./fmt.ts";
 
 export interface CompileOptions {
   /** Path to the input `.neoc` file (absolute or cwd-relative). */
@@ -200,6 +201,74 @@ export async function runTests(opts: RunTestsOptions): Promise<RunTestsResult> {
 
   log(`${passed} passed, ${failed} failed`);
   return { passed, failed };
+}
+
+/**
+ * Format every `.neoc` matching `sourceGlobs`. Rewrites each file in
+ * place only when the formatted output differs from disk. With
+ * `watch: true`, stays resident and reformats on change.
+ */
+export interface RunFormatOptions {
+  sourceGlobs: string[];
+  cwd: string;
+  watch?: boolean;
+  log?: (msg: string) => void;
+}
+
+export interface RunFormatResult {
+  formatted: number;
+  unchanged: number;
+}
+
+export async function runFormat(opts: RunFormatOptions): Promise<RunFormatResult> {
+  const log = opts.log ?? ((m) => console.log(m));
+  const files = await collectNeocFiles(opts.sourceGlobs, opts.cwd);
+  let formatted = 0;
+  let unchanged = 0;
+
+  const formatOne = async (file: string): Promise<void> => {
+    try {
+      const source = await Bun.file(file).text();
+      const next = formatSource(source);
+      if (next === source) {
+        unchanged++;
+        return;
+      }
+      await Bun.write(file, next);
+      formatted++;
+      log(`formatted ${path.relative(opts.cwd, file) || file}`);
+    } catch (err) {
+      log(`neoc: ${path.relative(opts.cwd, file)}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  for (const f of files) await formatOne(f);
+
+  if (opts.watch) {
+    log(`watching ${files.length} file${files.length === 1 ? "" : "s"} for changes…`);
+    const { watch } = await import("node:fs");
+    const dirs = new Set(files.map((f) => path.dirname(f)));
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const dirty = new Set<string>();
+    const flush = async (): Promise<void> => {
+      const batch = [...dirty];
+      dirty.clear();
+      for (const f of batch) await formatOne(f);
+    };
+    for (const dir of dirs) {
+      watch(dir, { recursive: false }, (_event, filename) => {
+        if (!filename) return;
+        if (!filename.endsWith(".neoc")) return;
+        const full = path.resolve(dir, String(filename));
+        dirty.add(full);
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => void flush(), 200);
+      });
+    }
+    await new Promise<void>(() => {});
+  }
+
+  return { formatted, unchanged };
 }
 
 const TEST_DRIVER = `

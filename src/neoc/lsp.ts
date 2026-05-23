@@ -45,6 +45,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { parse } from "./parser/index.ts";
 import * as M from "./ast/index.ts";
 import { transpile } from "./compiler.ts";
+import { formatSource } from "./fmt.ts";
 
 interface JsonRpcMessage {
   jsonrpc: "2.0";
@@ -398,6 +399,7 @@ export async function runLsp(): Promise<void> {
           renameProvider: { prepareProvider: true },
           signatureHelpProvider: { triggerCharacters: ["(", ","] },
           codeLensProvider: { resolveProvider: false },
+          documentFormattingProvider: true,
         },
         serverInfo: { name: "neoc neoc", version: "0.1.0" },
       });
@@ -511,6 +513,12 @@ export async function runLsp(): Promise<void> {
         ? await codeLensesFor(doc, p.textDocument.uri, workspaceRoots)
         : [];
       respond(msg.id!, lenses);
+      return;
+    }
+    if (msg.method === "textDocument/formatting") {
+      const p = msg.params as { textDocument: { uri: string } };
+      const doc = docs.get(p.textDocument.uri);
+      respond(msg.id!, doc ? formattingEditsFor(doc) : []);
       return;
     }
 
@@ -1390,6 +1398,18 @@ function renderMethodStub(
     ? `${indent}${indent}// TODO override default for ${m.name}`
     : `${indent}${indent}throw new Error("${m.name} not implemented");`;
   return `${indent}${asyncPrefix}${m.name}${sig} {\n${todo}\n${indent}}`;
+}
+
+/**
+ * Build the `TextEdit[]` that replaces the entire document with its
+ * canonical-formatted text. Returns `[]` when the formatter is a no-op
+ * so the editor doesn't mark the buffer dirty for nothing.
+ */
+export function formattingEditsFor(doc: DocState): TextEdit[] {
+  const next = formatSource(doc.text);
+  if (next === doc.text) return [];
+  const end = offsetToPosition(doc.text, doc.text.length);
+  return [{ range: { start: { line: 0, character: 0 }, end }, newText: next }];
 }
 
 function definitionAt(

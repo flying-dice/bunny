@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import * as path from "node:path";
 import { parseArgs } from "node:util";
-import { buildProject, compileFile, runTests } from "./neoc/driver.ts";
+import { buildProject, compileFile, runFormat, runTests } from "./neoc/driver.ts";
 import { runLsp } from "./neoc/lsp.ts";
 
 export interface RunCliOptions {
@@ -58,6 +58,19 @@ export async function runCli(opts: RunCliOptions = {}): Promise<string[]> {
       log,
     });
     if (result.failed > 0) process.exit(1);
+    return [];
+  }
+
+  // `neoc fmt -s <glob>... [-w]` — canonical-format every matching file in place.
+  if (cmd === "fmt") {
+    requireSource(sourceGlobs);
+    const result = await runFormat({
+      sourceGlobs,
+      cwd,
+      watch: values.watch ?? false,
+      log,
+    });
+    log(`${result.formatted} formatted, ${result.unchanged} unchanged`);
     return [];
   }
 
@@ -126,6 +139,7 @@ Usage: neoc <command> [flags]
 Commands:
   build    -s <glob>... [-w]       Compile every matching .neoc to sibling .lua.
   compile  <file.neoc> [-o out.lua] Transpile a single .neoc file.
+  fmt      -s <glob>... [-w]       Canonical-format every matching .neoc in place.
   test     [-s <glob>...]           Compile + run every #[test] function.
   lsp                              Stdio language server (used by editors).
 
