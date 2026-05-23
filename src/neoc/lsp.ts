@@ -18,6 +18,9 @@
  *   - `textDocument/documentSymbol` — outline of every top-level
  *     declaration plus its fields / methods, used to populate editor
  *     structure panels.
+ *   - `textDocument/references` — word-boundary scan across every
+ *     `.neoc` file in the workspace for occurrences of the symbol
+ *     under the cursor.
  */
 
 import { readFileSync } from "node:fs";
@@ -213,6 +216,7 @@ export async function runLsp(): Promise<void> {
           definitionProvider: true,
           codeActionProvider: { codeActionKinds: ["quickfix"] },
           documentSymbolProvider: true,
+          referencesProvider: true,
         },
         serverInfo: { name: "neoc neoc", version: "0.1.0" },
       });
@@ -277,6 +281,15 @@ export async function runLsp(): Promise<void> {
       const p = msg.params as { textDocument: { uri: string } };
       const doc = docs.get(p.textDocument.uri);
       respond(msg.id!, doc ? documentSymbolsFor(doc) : []);
+      return;
+    }
+    if (msg.method === "textDocument/references") {
+      const p = msg.params as ReferenceParams;
+      const doc = docs.get(p.textDocument.uri);
+      const locations = doc
+        ? await findReferences(doc, p.position, p.textDocument.uri, workspaceRoots)
+        : [];
+      respond(msg.id!, locations);
       return;
     }
 
@@ -1057,7 +1070,13 @@ function hoverMarkdown(signature: string, doc: string | undefined): string {
 // Definition
 // ----------------------------------------------------------------------------
 
-interface Location { uri: string; range: Range }
+export interface Location { uri: string; range: Range }
+
+export interface ReferenceParams {
+  textDocument: { uri: string };
+  position: Position;
+  context?: { includeDeclaration?: boolean };
+}
 
 // ----------------------------------------------------------------------------
 // Code actions
@@ -1174,6 +1193,120 @@ function definitionAt(
     }
   }
   return null;
+}
+
+// ----------------------------------------------------------------------------
+// References
+// ----------------------------------------------------------------------------
+
+/**
+ * Find every word-boundary occurrence of the symbol under `position`
+ * in `doc`, plus every occurrence in any other `.neoc` file under
+ * `workspaceRoots`. Occurrences inside `//` line comments, `///` doc
+ * comments, and single- or double-quoted string literals are skipped.
+ *
+ * Pure with respect to its inputs aside from reading workspace files
+ * off disk. Returns `[]` when the cursor isn't on an identifier.
+ */
+export async function findReferences(
+  doc: DocState,
+  position: Position,
+  uri: string,
+  workspaceRoots: readonly string[],
+): Promise<Location[]> {
+  const word = wordAt(doc.text, position);
+  if (!word) return [];
+  const name = word.text;
+  const out: Location[] = [];
+  for (const range of scanIdentifierOccurrences(doc.text, name)) {
+    out.push({ uri, range });
+  }
+  const seen = new Set<string>([uri]);
+  for (const root of workspaceRoots) {
+    const glob = new Bun.Glob("**/*.neoc");
+    for await (const rel of glob.scan({ cwd: root, onlyFiles: true })) {
+      const abs = `${root}/${rel}`;
+      const fileUri = pathToFileURL(abs).href;
+      if (seen.has(fileUri)) continue;
+      seen.add(fileUri);
+      let text: string;
+      try {
+        text = readFileSync(abs, "utf-8");
+      } catch {
+        continue;
+      }
+      for (const range of scanIdentifierOccurrences(text, name)) {
+        out.push({ uri: fileUri, range });
+      }
+    }
+  }
+  return out;
+}
+
+// Yield a Range for every word-boundary occurrence of `name` in `text`
+// that isn't inside a `//`-style comment or a quoted string literal.
+// Word boundary = the character before and after the match is not an
+// identifier character — so `Foo` matches in `: Foo`, `Foo {`, `Foo()`,
+// but not in `Foobar` or `MyFoo`.
+function* scanIdentifierOccurrences(text: string, name: string): Generator<Range> {
+  const skip = computeSkipMask(text);
+  let i = 0;
+  while (true) {
+    const hit = text.indexOf(name, i);
+    if (hit < 0) return;
+    i = hit + name.length;
+    if (skip[hit]) continue;
+    const prev = text[hit - 1];
+    const next = text[hit + name.length];
+    if (prev !== undefined && /[A-Za-z0-9_$]/.test(prev)) continue;
+    if (next !== undefined && /[A-Za-z0-9_$]/.test(next)) continue;
+    yield offsetsToRange(text, hit, hit + name.length);
+  }
+}
+
+// Build a per-character boolean mask marking every byte that sits
+// inside a comment or string literal. The reference scan skips any
+// match whose first byte is masked. This approximation doesn't track
+// neoc's block comments, escape sequences, or template literals — see
+// the limitations section of `specs/find-references.md`.
+function computeSkipMask(text: string): Uint8Array {
+  const mask = new Uint8Array(text.length);
+  let i = 0;
+  while (i < text.length) {
+    const c = text[i];
+    const c2 = text[i + 1];
+    if (c === "/" && c2 === "/") {
+      // Covers both `//` and `///` — `///` is a `//` followed by `/`.
+      while (i < text.length && text[i] !== "\n") {
+        mask[i] = 1;
+        i++;
+      }
+      continue;
+    }
+    if (c === '"' || c === "'") {
+      const quote = c;
+      mask[i] = 1;
+      i++;
+      while (i < text.length && text[i] !== quote) {
+        if (text[i] === "\\" && i + 1 < text.length) {
+          mask[i] = 1;
+          mask[i + 1] = 1;
+          i += 2;
+          continue;
+        }
+        if (text[i] === "\n") break;
+        mask[i] = 1;
+        i++;
+      }
+      if (i < text.length && text[i] === quote) {
+        mask[i] = 1;
+        i++;
+      }
+      continue;
+    }
+    i++;
+  }
+  return mask;
 }
 
 // ----------------------------------------------------------------------------
