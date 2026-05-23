@@ -1,0 +1,11 @@
+/// A registered user. Demonstrates two user-authored macros:
+///   - `#[email]` validates the address inside `.new`.
+///   - `#[derive(JsonString)]` emits `User.toJsonString(self)`.
+#[derive(JsonString)]
+struct User {
+  #[minLength(1)]
+  name: string,
+  #[email]
+  email: string,
+  active: boolean,
+}
