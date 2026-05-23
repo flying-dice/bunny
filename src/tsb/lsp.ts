@@ -558,6 +558,19 @@ function completionsAt(
     }
   }
 
+  // `<receiver>.<word>` — generic member access on any identifier
+  // whose declared type we can resolve to a struct (function / method
+  // parameter for now).
+  const dotAccess = before.match(/\b([A-Za-z_][\w$]*)\.(\w*)$/);
+  if (dotAccess) {
+    const receiver = dotAccess[1]!;
+    const receiverType = resolveLocalIdentifierType(doc, offset, receiver);
+    if (receiverType) {
+      addStructFieldCompletions(receiverType, doc, workspace, items);
+      if (items.length > 0) return { isIncomplete: false, items };
+    }
+  }
+
   const implCtx = findImplBodyContext(doc, offset);
   if (implCtx) {
     addTraitMethodStubs(implCtx, doc, workspace, items);
@@ -624,6 +637,92 @@ function findEnclosingImpl(doc: DocState, offset: number): M.ImplDecl | undefine
     return part;
   }
   return undefined;
+}
+
+// Resolve the declared type of an identifier in scope at `offset` by
+// walking the parameter list of the enclosing function or impl
+// method. Returns the unwrapped struct name (e.g. `Product`) when
+// the parameter's annotation looks like a single struct identifier,
+// otherwise undefined. Doesn't (yet) follow `let x: T = …` locals.
+function resolveLocalIdentifierType(
+  doc: DocState,
+  offset: number,
+  name: string,
+): string | undefined {
+  if (!doc.module) return undefined;
+  const params = enclosingParamList(doc, offset);
+  if (!params) return undefined;
+  for (const p of parseParamList(params)) {
+    if (p.name === name) {
+      return extractStructName(p.type);
+    }
+  }
+  return undefined;
+}
+
+function enclosingParamList(doc: DocState, offset: number): string | undefined {
+  if (!doc.module) return undefined;
+  for (const part of doc.module.parts) {
+    if (part.kind === "function") {
+      if (offset >= part.span.start && offset <= part.span.end) return part.params;
+    } else if (part.kind === "impl") {
+      if (offset < part.span.start || offset > part.span.end) continue;
+      for (const m of part.methods) {
+        if (offset >= m.span.start && offset <= m.span.end) return m.params;
+      }
+    }
+  }
+  return undefined;
+}
+
+// Tiny parameter parser — splits on top-level commas, then on the
+// first `:` per entry. Matches the structure of `params` strings the
+// parser hands us (verbatim, parens already stripped).
+function parseParamList(raw: string): Array<{ name: string; type: string }> {
+  const out: Array<{ name: string; type: string }> = [];
+  let depth = 0;
+  let last = 0;
+  const parts: string[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const c = raw[i]!;
+    if (c === "<" || c === "(" || c === "[" || c === "{") depth++;
+    else if (c === ">" || c === ")" || c === "]" || c === "}") depth--;
+    else if (c === "," && depth === 0) { parts.push(raw.slice(last, i)); last = i + 1; }
+  }
+  if (last <= raw.length) parts.push(raw.slice(last));
+  for (const p of parts) {
+    const trimmed = p.trim();
+    if (!trimmed) continue;
+    const colon = topLevelColonIndex(trimmed);
+    if (colon < 0) continue;
+    const name = trimmed.slice(0, colon).trim().replace(/[?].*$/, "");
+    const rest = trimmed.slice(colon + 1).trim();
+    const eq = rest.indexOf("=");
+    const type = (eq < 0 ? rest : rest.slice(0, eq)).trim();
+    out.push({ name, type });
+  }
+  return out;
+}
+
+function topLevelColonIndex(s: string): number {
+  let depth = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]!;
+    if (c === "<" || c === "(" || c === "[" || c === "{") depth++;
+    else if (c === ">" || c === ")" || c === "]" || c === "}") depth--;
+    else if (c === ":" && depth === 0) return i;
+  }
+  return -1;
+}
+
+// Pull a single struct identifier out of a type annotation when the
+// annotation looks like one. Returns undefined for unions, generics,
+// arrays, primitives — anything we can't safely resolve to one
+// struct's field list.
+function extractStructName(typeText: string): string | undefined {
+  const t = typeText.trim();
+  if (!/^[A-Z][A-Za-z0-9_]*$/.test(t)) return undefined;
+  return t;
 }
 
 function addStructFieldCompletions(
