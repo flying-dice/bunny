@@ -162,7 +162,20 @@ export async function runLsp(): Promise<void> {
       respond(msg.id!, {
         capabilities: {
           textDocumentSync: { openClose: true, change: 1 /* Full */ },
-          completionProvider: { triggerCharacters: ["#", "[", "(", "@", ":", " ", "."] },
+          completionProvider: {
+            // Symbol triggers cover the type / attribute / member paths;
+            // the letter list ensures Zed and other clients that only
+            // auto-invoke on declared trigger chars still pop the
+            // completion list while the user is typing an identifier.
+            triggerCharacters: [
+              "#", "[", "(", "@", ":", " ", ".",
+              "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m",
+              "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
+              "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M",
+              "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z",
+              "_",
+            ],
+          },
           hoverProvider: true,
           definitionProvider: true,
           codeActionProvider: { codeActionKinds: ["quickfix"] },
