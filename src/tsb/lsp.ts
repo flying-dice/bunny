@@ -251,10 +251,27 @@ async function harvestSymbols(
 // declaration. Returns the unwrapped markdown body, or undefined when
 // nothing's there.
 function extractDocBefore(text: string, beforeIndex: number): string | undefined {
-  // Skip whitespace/blank lines between the declaration and any docs.
   let i = beforeIndex - 1;
-  while (i >= 0 && (text[i] === " " || text[i] === "\t" || text[i] === "\n" || text[i] === "\r")) {
-    i--;
+  // Skip whitespace, and any `#[...]` attribute macros that sit
+  // between the docs and the declaration keyword. Loop because a
+  // declaration can carry multiple attributes.
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    while (i >= 0 && (text[i] === " " || text[i] === "\t" || text[i] === "\n" || text[i] === "\r")) i--;
+    if (i < 0) return undefined;
+    if (text[i] !== "]") break;
+    // Walk back to the matching `#[`.
+    let depth = 1;
+    let j = i - 1;
+    while (j >= 0 && depth > 0) {
+      const ch = text[j];
+      if (ch === "]") depth++;
+      else if (ch === "[") depth--;
+      if (depth === 0) break;
+      j--;
+    }
+    if (j < 1 || text[j - 1] !== "#") return undefined;
+    i = j - 2; // step past `#[`
   }
   if (i < 0) return undefined;
 
