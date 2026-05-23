@@ -1,0 +1,12 @@
+import { Isbn } from "../types/Isbn.ts";
+
+struct AddBookDto {
+  #[deep]
+  isbn: Isbn,
+  #[minLength(1), maxLength(200)]
+  title: string,
+  #[minLength(1), maxLength(100)]
+  author: string,
+  #[minimum(1), maximum(1000)]
+  copies: number,
+}

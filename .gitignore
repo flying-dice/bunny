@@ -7,16 +7,18 @@ dist
 *.tgz
 .tmp
 
-# generated example artefacts — regenerated with `bun run example:all`
-examples/api/app.ts
+# generated example artefacts — regenerated with `bun run example:*`
 examples/api/routes.ts
-examples/csr/app.ts
 examples/csr/routes.ts
-examples/ssr/app.ts
-examples/ssr/routes.ts
+examples/csr/client.ts
+examples/cli/cli-app.ts
+examples/sql/bus.ts
 examples/**/openapi.json
 examples/**/openapi.yaml
 examples/**/openapi.yml
+
+# tsb transpiler outputs (regenerated alongside the assemblers above)
+examples/**/*.ts.map
 
 # CSR build output
 examples/csr/dist
@@ -44,6 +46,15 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # IntelliJ based IDEs
 .idea
+
+# Zed extension build artefacts
+zed/target/
+zed/Cargo.lock
+zed/grammars/
+zed/extension.wasm
+
+# Playwright MCP working dir
+.playwright-mcp/
 
 # Finder (MacOS) folder config
 .DS_Store

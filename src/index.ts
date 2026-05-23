@@ -1,30 +1,11 @@
-export type { GenerateBunOptions, GenerateBunOutput } from "./bun.ts";
-export { generateBun } from "./bun.ts";
-export type { Config, RunCliOptions } from "./cli.ts";
+export type { RunCliOptions } from "./cli.ts";
 export { runCli } from "./cli.ts";
-export type { GenerateOptions } from "./generator.ts";
-export { generate } from "./generator.ts";
-export type {
-  FormRequest,
-  HtmlRequest,
-  HtmlResponse,
-  Input,
-  JsonRequest,
-  JsonResponse,
-  MultipartRequest,
-  TextRequest,
-  TextResponse,
-  TypedRequest,
-  TypedResponse,
-  XmlRequest,
-  XmlResponse,
-} from "./http.ts";
-export type { HttpMethod } from "./internal/discover.ts";
-// Runtime helpers — used by the generated routes.ts (`import { … } from "@flying-dice/bunny"`).
-export {
-  AssertionError,
-  applyValidation,
-  FORMATS,
-  RequestValidationError,
-  safeInvoke,
-} from "./runtime.ts";
+
+// Tsb compiler surface — programmatic access for tools that want to
+// transpile or assemble outside the CLI.
+export type { TranspileOptions, TranspileResult } from "./tsb/transpile.ts";
+export { transpile } from "./tsb/transpile.ts";
+export type { BuildOptions, CompileOptions, CompileResult } from "./tsb/compile.ts";
+export { buildProject, compileFile } from "./tsb/compile.ts";
+export type { Macro, MacroContext } from "./tsb/macros.ts";
+export { MacroRegistry } from "./tsb/macros.ts";

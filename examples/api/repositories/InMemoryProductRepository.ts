@@ -1,26 +1,17 @@
 import type { Product } from "../entities/Product.ts";
 import type { ProductId } from "../types/ProductId.ts";
-import type { ProductRepository } from "./ProductRepository.ts";
 
-/**
- * Array-backed implementation. Default impl — picked when no `--profile`
- * is passed (active profile is `"default"`).
- *
- * @provides ProductRepository
- * @profile default
- */
-export class InMemoryProductRepository implements ProductRepository {
-  private rows: Product[] = [];
+const products: Product[] = [];
 
-  list(): Product[] {
-    return this.rows;
-  }
-
-  find(id: ProductId): Product | undefined {
-    return this.rows.find((p) => p.id === id);
-  }
-
-  add(product: Product): void {
-    this.rows.push(product);
-  }
+export function list(): Product[] {
+  return [...products];
 }
+
+export function find(id: ProductId): Product | undefined {
+  return products.find((p) => p.id.value === id.value);
+}
+
+export function add(product: Product): void {
+  products.push(product);
+}
+//# sourceMappingURL=InMemoryProductRepository.ts.map

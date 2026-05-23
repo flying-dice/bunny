@@ -1,56 +1,30 @@
-import type { JsonResponse, TypedRequest, TypedResponse } from "../../../src/index.ts";
-import type { CreateTodoDto } from "../dtos/CreateTodoDto.ts";
+import { CreateTodoDto } from "../dtos/CreateTodoDto.ts";
 import type { Todo } from "../entities/Todo.ts";
-import type { TodoService } from "../services/TodoService.ts";
+import * as todos from "../services/TodoService.ts";
 
-/** @controller */
-export class TodosController {
-  /** @inject todos */
-  constructor(private todos: TodoService) {}
-
-  /**
-   * List every todo.
-   * @get /api/todos
-   * @tag todos
-   */
-  listTodos(_req: TypedRequest): JsonResponse<Todo[]> {
-    return Response.json(this.todos.list());
-  }
-
-  /**
-   * Create a todo.
-   * @post /api/todos
-   * @tag todos
-   */
-  async createTodo(req: TypedRequest<{ body: CreateTodoDto }>): Promise<TypedResponse<Todo, 201>> {
-    const dto = await req.json();
-    return Response.json(this.todos.create(dto), { status: 201 });
-  }
-
-  /**
-   * Toggle a todo's `done` flag.
-   * @patch /api/todos/:id/toggle
-   * @tag todos
-   */
-  toggleTodo(
-    req: TypedRequest<{ params: { id: string } }>
-  ): TypedResponse<Todo> | TypedResponse<{ message: string }, 404> {
-    const t = this.todos.toggle(req.params.id);
-    if (!t) return Response.json({ message: "not found" }, { status: 404 });
-    return Response.json(t);
-  }
-
-  /**
-   * Delete a todo.
-   * @delete /api/todos/:id
-   * @tag todos
-   */
-  deleteTodo(
-    req: TypedRequest<{ params: { id: string } }>
-  ): TypedResponse<void, 204> | TypedResponse<{ message: string }, 404> {
-    if (!this.todos.remove(req.params.id)) {
-      return Response.json({ message: "not found" }, { status: 404 });
-    }
-    return new Response(null, { status: 204 });
-  }
+export function listTodos(): Todo[] {
+  return todos.list();
 }
+
+export function createTodo(body: CreateTodoDto): Todo {
+  return todos.create(CreateTodoDto.new(body));
+}
+
+export function toggleTodo(id: string): Todo | { error: string } {
+  const t = todos.toggle(id);
+  return t ?? { error: "not found" };
+}
+
+export function deleteTodo(id: string): { ok: boolean } {
+  return { ok: todos.remove(id) };
+}
+
+export const __route_listTodos: { method: "GET"; path: "/api/todos"; params: { name: string; type: string }[]; handler: typeof listTodos } = { method: "GET", path: "/api/todos", params: [], handler: listTodos };
+export const __openapi_listTodos = {"operationId":"listTodos","method":"GET","path":"/api/todos","parameters":[],"responses":{"200":{"description":"Successful response","content":{"application/json":{"schema":{"type":"array","items":{"$ref":"#/components/schemas/Todo"}}}}}}} as const;
+export const __route_createTodo: { method: "POST"; path: "/api/todos"; params: { name: string; type: string }[]; handler: typeof createTodo } = { method: "POST", path: "/api/todos", params: [{"name":"body","type":"CreateTodoDto"}], handler: createTodo };
+export const __openapi_createTodo = {"operationId":"createTodo","method":"POST","path":"/api/todos","parameters":[],"responses":{"200":{"description":"Successful response","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Todo"}}}}}} as const;
+export const __route_toggleTodo: { method: "PATCH"; path: "/api/todos/:id/toggle"; params: { name: string; type: string }[]; handler: typeof toggleTodo } = { method: "PATCH", path: "/api/todos/:id/toggle", params: [{"name":"id","type":"string"}], handler: toggleTodo };
+export const __openapi_toggleTodo = {"operationId":"toggleTodo","method":"PATCH","path":"/api/todos/{id}/toggle","parameters":[{"name":"id","in":"path","required":true,"schema":{"type":"string"}}],"responses":{"200":{"description":"Successful response","content":{"application/json":{"schema":{}}}}}} as const;
+export const __route_deleteTodo: { method: "DELETE"; path: "/api/todos/:id"; params: { name: string; type: string }[]; handler: typeof deleteTodo } = { method: "DELETE", path: "/api/todos/:id", params: [{"name":"id","type":"string"}], handler: deleteTodo };
+export const __openapi_deleteTodo = {"operationId":"deleteTodo","method":"DELETE","path":"/api/todos/{id}","parameters":[{"name":"id","in":"path","required":true,"schema":{"type":"string"}}],"responses":{"200":{"description":"Successful response","content":{"application/json":{"schema":{"type":"null"}}}}}} as const;
+//# sourceMappingURL=TodosController.ts.map

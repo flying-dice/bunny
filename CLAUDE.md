@@ -2,7 +2,7 @@
 
 Guidance for Claude (and any LLM agent) working in the **Bunny** repo.
 
-> 🐰 Bunny — the Spring Framework for Bun. Fast as a rabbit, familiar as Spring.
+> 🐰 Bunny — a Rust-flavoured TypeScript dialect for Bun. `.tsb` → plain `.ts`.
 
 ---
 
@@ -19,10 +19,10 @@ This repo favors short, direct prose. Most explanatory writing — docs, comment
 - Throat-clearing — get to the point in the first sentence
 
 **Before:**
-> The reason your bean is not being injected is likely because you forgot to decorate the class with `@Injectable`, so the container has no provider registered for it.
+> The reason `Foo.new(data)` isn't being generated is likely because the struct doesn't have a `#[derive(...)]` attribute, a trait impl, or any field constraints, so the emitter doesn't synthesise a factory for it.
 
 **After:**
-> The bean isn't injected because the class is missing `@Injectable` — the container has no provider for it. Add the decorator.
+> `Foo.new` isn't generated because the struct has nothing to validate — no derives, no traits, no field constraints. Add `#[derive(Clone)]` or write an explicit `impl Foo`.
 
 Same fix, half the words.
 
@@ -37,10 +37,10 @@ Some things stay exact and complete. **Never** abbreviate or stylize these:
 | Thing | Rule |
 | --- | --- |
 | Code blocks | Real code, real syntax. |
-| API names | Exact. `@Injectable` stays `@Injectable`. |
+| API names | Exact. `#[derive(Clone)]` stays `#[derive(Clone)]`. |
 | Type signatures | Exact. Never trim a type. |
 | Error / log messages | Quote verbatim. |
-| Commands | Exact: `bunny nest`, `bunny hop`, `bunny burrow`. |
+| Commands | Exact: `bunny build`, `bunny routes`, `bunny client`. |
 | File paths, env vars | Exact. |
 | `tsdoc` doc comments | Full, normal English — see below. |
 | Legal, LICENSE, security notes | Complete and careful. |
@@ -64,11 +64,10 @@ Two doc layers, different rules.
 
 ```ts
 /**
- * Registers a provider in the Bunny container.
+ * Registers a macro with the registry.
  *
- * @param token - Injection token to bind.
- * @param provider - Class or factory that resolves the token.
- * @returns The container, for chaining.
+ * @param macro - The macro to register. The kind determines which slot
+ *   (field-constraint / derive / function-attr) it lands in.
  */
 ```
 
@@ -94,25 +93,27 @@ Use [Conventional Commits](https://www.conventionalcommits.org). Terse, but spec
 Format: `type(scope): description`
 
 ```
-fix(di): bean not injected when factory is async
+fix(sql): mutations with RETURNING dispatch through .get instead of .run
 
-Container now awaits the factory. Adds a test.
+Otherwise UPDATE ... RETURNING silently dropped the returned row.
+Adds a test against bun:sqlite.
 
 Closes #42.
 ```
 
 - **Type** — one of: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`.
-- **Scope** — optional, the affected area (e.g. `di`, `router`, `cli`, `core`).
+- **Scope** — optional, the affected area (e.g. `parser`, `emitter`, `cli`, `lsp`, `macros`).
 - **Description** — imperative, lowercase, no trailing period.
 - **Body** — optional, terse prose. Bullet what changed.
 - **Footer** — `Closes #42`, `Refs #7`, etc.
-- **Breaking changes** — append `!` after type/scope (`feat(di)!:`) **and** add a `BREAKING CHANGE:` footer with full, careful English so readers can't miss it.
+- **Breaking changes** — append `!` after type/scope (`feat(macros)!:`) **and** add a `BREAKING CHANGE:` footer with full, careful English so readers can't miss it.
 
 ```
-feat(container)!: drop sync factory support
+feat(macros)!: function-attr macros emit __<kind>_<fn> descriptors
 
-BREAKING CHANGE: Factories must now return a Promise. Wrap sync
-factories in `Promise.resolve()` to migrate.
+BREAKING CHANGE: Macros that previously emitted route handlers as the
+function replacement must now use ctx.appendModule to register a
+descriptor. The assembler harvests it across files at build time.
 ```
 
 PR titles follow the same format — the squash-merge commit inherits them, so they feed the changelog.

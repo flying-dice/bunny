@@ -1,45 +1,23 @@
-import type { JsonResponse, TypedRequest, TypedResponse } from "../../../src/index.ts";
-import type { CreateProductDto } from "../dtos/CreateProductDto.ts";
+import { CreateProductDto } from "../dtos/CreateProductDto.ts";
 import type { Product } from "../entities/Product.ts";
-import type { ProductService } from "../services/ProductService.ts";
-import type { ProductId } from "../types/ProductId.ts";
+import * as products from "../services/ProductService.ts";
 
-/** @controller */
-export class ProductsController {
-  /** @inject products */
-  constructor(private products: ProductService) {}
-
-  /**
-   * List every product.
-   * @get /products
-   * @tag products
-   */
-  listProducts(_req: TypedRequest): JsonResponse<Product[]> {
-    return Response.json(this.products.list());
-  }
-
-  /**
-   * Fetch a single product by id.
-   * @get /products/:id
-   * @tag products
-   */
-  getProduct(
-    req: TypedRequest<{ params: { id: ProductId } }>
-  ): TypedResponse<Product> | TypedResponse<{ message: string }, 404> {
-    const p = this.products.find(req.params.id);
-    if (!p) return Response.json({ message: "not found" }, { status: 404 });
-    return Response.json(p);
-  }
-
-  /**
-   * Create a product.
-   * @post /products
-   * @tag products
-   */
-  async createProduct(
-    req: TypedRequest<{ body: CreateProductDto }>
-  ): Promise<TypedResponse<Product, 201>> {
-    const dto = await req.json();
-    return Response.json(this.products.create(dto), { status: 201 });
-  }
+export function listProducts(): Product[] {
+  return products.list();
 }
+
+export function getProduct(id: string): Product | undefined {
+  return products.find(id);
+}
+
+export function createProduct(body: CreateProductDto): Product {
+  return products.create(CreateProductDto.new(body));
+}
+
+export const __route_listProducts: { method: "GET"; path: "/products"; params: { name: string; type: string }[]; handler: typeof listProducts } = { method: "GET", path: "/products", params: [], handler: listProducts };
+export const __openapi_listProducts = {"operationId":"listProducts","method":"GET","path":"/products","parameters":[],"responses":{"200":{"description":"Successful response","content":{"application/json":{"schema":{"type":"array","items":{"$ref":"#/components/schemas/Product"}}}}}}} as const;
+export const __route_getProduct: { method: "GET"; path: "/products/:id"; params: { name: string; type: string }[]; handler: typeof getProduct } = { method: "GET", path: "/products/:id", params: [{"name":"id","type":"string"}], handler: getProduct };
+export const __openapi_getProduct = {"operationId":"getProduct","method":"GET","path":"/products/{id}","parameters":[{"name":"id","in":"path","required":true,"schema":{"type":"string"}}],"responses":{"200":{"description":"Successful response","content":{"application/json":{"schema":{}}}}}} as const;
+export const __route_createProduct: { method: "POST"; path: "/products"; params: { name: string; type: string }[]; handler: typeof createProduct } = { method: "POST", path: "/products", params: [{"name":"body","type":"CreateProductDto"}], handler: createProduct };
+export const __openapi_createProduct = {"operationId":"createProduct","method":"POST","path":"/products","parameters":[],"responses":{"200":{"description":"Successful response","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Product"}}}}}} as const;
+//# sourceMappingURL=ProductsController.ts.map

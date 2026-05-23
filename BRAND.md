@@ -2,9 +2,9 @@
 
 # 🐰 Bunny
 
-### The Spring Framework for Bun
+### A Rust-flavoured TypeScript dialect for Bun
 
-*Fast as a rabbit. Familiar as Spring.*
+*Fast as a rabbit. Familiar as TypeScript.*
 
 </div>
 
@@ -12,9 +12,11 @@
 
 ## What is Bunny?
 
-Bunny is a Spring-inspired application framework for the [Bun](https://bun.sh) runtime, written in TypeScript. It brings the dependency injection, decorators, and convention-over-configuration patterns that Java/Spring developers know and love into a fast, modern, TypeScript-native stack — powered by `ts-morph` for static analysis and `tsdoc` for first-class documentation.
+Bunny is a TypeScript dialect (`.tsb`) and small compiler for the [Bun](https://bun.sh) runtime. It adds `struct`, `impl`, `match`, and `#[macro]` attributes on top of TypeScript and transpiles to plain `.ts` — the runtime carries zero dependency on bunny.
 
-If you've ever wished Spring Boot ran at Bun speed with full type safety, that's Bunny.
+The macro system turns idiomatic Rust patterns (derives, From/Into, attribute-driven codegen) into typed TypeScript. Project-level assemblers harvest macro descriptors across files to emit a route table, a typed fetch client, a CLI dispatcher, a typed event bus, and an OpenAPI 3.1 spec.
+
+If you've ever wished Rust's struct/impl/derive ergonomics existed in TypeScript without giving up the runtime, that's Bunny.
 
 ---
 
@@ -26,7 +28,7 @@ Three ideas hold the whole brand together. Everything — naming, docs, CLI outp
 Bunny rides on Bun, one of the fastest JavaScript runtimes available. Rabbits are quick. The framework should *feel* quick — fast cold starts, fast hot reload, fast DX. Speed isn't a feature we mention; it's the baseline expectation.
 
 ### 🌱 Spring
-Bunny is a love letter to the Spring Framework. Familiar patterns — dependency injection, decorators, modules, beans — lower the barrier for the millions of developers coming from the JVM world. "Spring" works on two levels: the framework heritage *and* the season of new growth.
+"Spring" works on two levels: the season of new growth, and the spring in a rabbit's hop. Bunny is a fresh take on TypeScript — Rust-flavoured ergonomics, no runtime container, code that runs as plain TS. The brand carries the seasonal energy without owing anything to any particular framework.
 
 ### 🥚 Easter Eggs
 Bunny has personality. The name itself is the first easter egg: *Bun → Bunny*, and bunnies bring Easter, and Easter is Spring. We lean into that loop everywhere — hidden surprises in the CLI, playful (never cringe) docs, friendly error messages. A framework people enjoy talking about.
@@ -41,7 +43,7 @@ The name does a remarkable amount of work:
 
 - **Sounds like Bun** — instantly signals the runtime it's built on.
 - **Bunnies are fast** — reinforces the speed identity.
-- **Bunny → Easter → Spring** — connects straight to the Spring Framework heritage *and* the season.
+- **Bunny → Easter → Spring** — connects to the season and the hop.
 - **Easter eggs** — the whole "hidden surprises" brand voice falls out of the name for free.
 - **Memorable & friendly** — easy to say, spell, and build a mascot around.
 
@@ -68,8 +70,7 @@ Bunny is **playful but professional**. We're a serious framework that doesn't ta
 Primary candidates — pick one for the hero, keep a couple as rotating subheads:
 
 - **"Spring into TypeScript."**
-- **"Fast as a rabbit, familiar as Spring."**
-- **"Built for Bun. Born in Spring."**
+- **"Rust ergonomics, TypeScript at runtime."**
 - **"Hop in."** *(short form / button copy)*
 
 ---
@@ -99,15 +100,20 @@ An Easter-adjacent palette kept tasteful and modern — fresh, not garish.
 
 ## CLI & Command Vocabulary
 
-Commands should feel natural in the rabbit/spring world while staying obvious to newcomers:
+Today's commands (see `bunny --help` for the full surface):
 
 | Command | Action |
 |---------|--------|
-| `bunny nest` | Initialize a new project |
-| `bunny run` | Run the app |
-| `bunny build` | Build for production |
-| `bunny hop` | Run migrations |
-| `bunny burrow` | Generate scaffolding / dig out a new module |
+| `bunny build` | Compile every matching `.tsb` to sibling `.ts`. |
+| `bunny compile` | Transpile a single `.tsb` file. |
+| `bunny routes` | Emit a `Bun.serve` route table. |
+| `bunny client` | Emit a typed fetch client. |
+| `bunny cli` | Emit a CLI dispatcher from `#[command]`. |
+| `bunny events` | Emit a typed event bus. |
+| `bunny openapi` | Emit the OpenAPI 3.1 spec. |
+| `bunny lsp` | Stdio language server (Zed/VS Code extensions). |
+
+Future verbs (`nest`, `burrow`, `hop`) remain in the rabbit/spring vocabulary for scaffolding work yet to land.
 
 > CLI output carries subtle seasonal touches and the occasional easter egg — discoverable, never in the way.
 
@@ -129,10 +135,10 @@ Recurring traditions that make the project fun to follow:
 | Attribute | Value |
 |-----------|-------|
 | **Name** | Bunny |
-| **Descriptor** | The Spring Framework for Bun |
+| **Descriptor** | A Rust-flavoured TypeScript dialect for Bun |
 | **Runtime** | Bun |
-| **Language** | TypeScript |
-| **Powered by** | `ts-morph` (static analysis), `tsdoc` (documentation) |
+| **Source** | `.tsb` (a TypeScript superset with `struct` / `impl` / `match` / `#[macro]`) |
+| **Output** | Plain `.ts` — zero runtime dependency on bunny |
 | **Pillars** | Fast · Spring · Easter Eggs |
 | **Primary tagline** | Spring into TypeScript. |
 | **Mascot** | A rabbit with a spring coil 🐰🌀 |

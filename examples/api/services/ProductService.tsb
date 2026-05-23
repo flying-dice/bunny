@@ -1,0 +1,23 @@
+import type { CreateProductDto } from "../dtos/CreateProductDto.ts";
+import { Product } from "../entities/Product.ts";
+import { ProductId } from "../types/ProductId.ts";
+import * as repo from "../repositories/InMemoryProductRepository.ts";
+
+export function list(): Product[] {
+  return repo.list();
+}
+
+export function find(id: string): Product | undefined {
+  return repo.find(ProductId.new({ value: id }));
+}
+
+export function create(dto: CreateProductDto): Product {
+  const product = Product.new({
+    id: ProductId.new({ value: crypto.randomUUID() }),
+    name: dto.name,
+    priceCents: dto.priceCents,
+    stock: dto.stock,
+  });
+  repo.add(product);
+  return product;
+}

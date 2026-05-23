@@ -1,7 +1,31 @@
-export interface Todo {
-  /** @format uuid */
+export type Todo = {
   id: string;
-  /** @minLength 1 @maxLength 200 */
   title: string;
   done: boolean;
-}
+};
+export const Todo = {
+  new(data: Todo): Todo {
+    if (typeof data.id !== "string") throw new Error("id must be a string");
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.id)) throw new Error("id must be a valid UUID");
+    if (typeof data.title !== "string") throw new Error("title must be a string");
+    if (data.title.length < 1) throw new Error("title must be at least 1 character");
+    if (data.title.length > 200) throw new Error("title must be at most 200 characters");
+   return data; },
+
+  clone(self: Todo): Todo {
+    return {
+      id: self.id,
+      title: self.title,
+      done: self.done
+    };
+  },
+
+  equals(a: Todo, b: Todo): boolean {
+    return a.id === b.id && a.title === b.title && a.done === b.done;
+  },
+
+  toJson(self: Todo): string { return JSON.stringify(self); },
+    
+    fromJson(input: string): Todo { return Todo.new(JSON.parse(input) as Todo); },
+};
+//# sourceMappingURL=Todo.ts.map

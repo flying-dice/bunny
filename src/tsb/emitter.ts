@@ -1,0 +1,487 @@
+/**
+ * Emit final TypeScript from a tsb `Module` model, running macros along
+ * the way.
+ *
+ * Order of operations per module:
+ *
+ *   1. Walk every part. For each `OpaqueText`, push verbatim.
+ *   2. For each `StructDecl`, render `type Foo = {…};` with attrs stripped.
+ *   3. For each `ImplDecl`, render `const Foo = {…};` where each method's
+ *      body is potentially augmented by field-constraint macros, plus
+ *      `#[derive(…)]` macros append new methods.
+ *   4. For each `FunctionDecl`, run function-attr macros (in source order)
+ *      to wrap / rewrite. If none apply, emit the function verbatim.
+ *
+ * Macros never modify input text directly — they return text snippets the
+ * emitter weaves into the right slot.
+ */
+
+import * as M from "./model.ts";
+import { type MacroContext, MacroRegistry } from "./macros.ts";
+import { lowerMatchExpressions } from "./match.ts";
+
+export interface EmitChunk {
+  text: string;
+  /**
+   * Byte offset into the original `.tsb` source this chunk came from.
+   * Undefined for chunks the emitter introduced from thin air (synthetic
+   * impls, dispatcher scaffolding, macro `appendModule` calls).
+   */
+  sourceOffset?: number;
+}
+
+export interface EmitResult {
+  ts: string;
+  diagnostics: M.ParseDiagnostic[];
+  /**
+   * Ordered list of (text, sourceOffset) chunks whose concatenation
+   * equals `ts`. The source map generator walks these to assign each
+   * emitted line back to its `.tsb` origin.
+   */
+  chunks: EmitChunk[];
+}
+
+export interface EmitOptions {
+  sourcePath?: string;
+}
+
+export function emit(
+  module: M.Module,
+  registry: MacroRegistry,
+  options: EmitOptions = {}
+): EmitResult {
+  const diagnostics: M.ParseDiagnostic[] = [];
+  const chunks: EmitChunk[] = [];
+  const push = (text: string, sourceOffset?: number): void => {
+    if (text.length === 0) return;
+    chunks.push({ text, sourceOffset });
+  };
+  let moduleAppend = "";
+  const ctx = {
+    module,
+    sourcePath: options.sourcePath,
+    error(message: string, span: M.Span): void {
+      diagnostics.push({ message, span });
+    },
+    appendModule(text: string): void {
+      moduleAppend += (moduleAppend.length > 0 ? "\n" : "") + text;
+    },
+  };
+
+  // Build a name → struct lookup so derive macros can read fields when
+  // expanding inside the matching impl.
+  const structByName = new Map<string, M.StructDecl>();
+  for (const p of module.parts) {
+    if (p.kind === "struct") structByName.set(p.name, p);
+  }
+
+  // Group trait-impls by their target struct so they fold into the
+  // target's const block. A trait impl's methods are appended after the
+  // inherent impl's methods (and after derive-generated ones), giving
+  // the impl block its full method surface in source order.
+  const traitImplsByTarget = new Map<string, M.ImplDecl[]>();
+  const inherentImplTargets = new Set<string>();
+  for (const p of module.parts) {
+    if (p.kind !== "impl") continue;
+    if (p.traitName) {
+      const arr = traitImplsByTarget.get(p.name) ?? [];
+      arr.push(p);
+      traitImplsByTarget.set(p.name, arr);
+    } else {
+      inherentImplTargets.add(p.name);
+    }
+  }
+
+  // For each struct that has derives, trait impls, or field constraints
+  // but NO inherent impl, synthesise a minimal
+  // `impl Foo { new(data: Foo): Foo { return data; } }` so the derived
+  // / trait methods have a const block to land in — and so field
+  // constraints have a `new` to inject their guards into.
+  const syntheticImpls = new Map<string, M.ImplDecl>();
+  for (const p of module.parts) {
+    if (p.kind !== "struct") continue;
+    if (inherentImplTargets.has(p.name)) continue;
+    const hasDerives = p.attrs.some((a) => a.name === "derive");
+    const hasTraits = (traitImplsByTarget.get(p.name) ?? []).length > 0;
+    const hasFieldConstraints = p.fields.some((f) => f.attrs.length > 0);
+    if (!hasDerives && !hasTraits && !hasFieldConstraints) continue;
+    syntheticImpls.set(p.name, synthesiseInherentImpl(p));
+  }
+
+  for (const part of module.parts) {
+    switch (part.kind) {
+      case "opaque":
+        push(part.text, part.span.start);
+        break;
+      case "struct": {
+        push(emitStruct(part), part.span.start);
+        const synth = syntheticImpls.get(part.name);
+        if (synth) {
+          push("\n", part.span.start);
+          push(
+            emitImpl(synth, part, traitImplsByTarget.get(part.name) ?? [], registry, ctx),
+            part.span.start
+          );
+        }
+        break;
+      }
+      case "impl":
+        if (part.traitName) break;
+        push(
+          emitImpl(part, structByName.get(part.name), traitImplsByTarget.get(part.name) ?? [], registry, ctx),
+          part.span.start
+        );
+        break;
+      case "function":
+        push(emitFunction(part, registry, ctx), part.span.start);
+        break;
+    }
+  }
+
+  if (moduleAppend.length > 0) {
+    push("\n");
+    push(moduleAppend);
+    push("\n");
+  }
+
+  const ts = chunks.map((c) => c.text).join("");
+  return { ts, diagnostics, chunks };
+}
+
+// ----------------------------------------------------------------------------
+// struct → type
+// ----------------------------------------------------------------------------
+
+function emitStruct(s: M.StructDecl): string {
+  // structs always export their type — same convention as `impl`. The
+  // value identity (a struct = a publicly addressable data shape) only
+  // makes sense if other modules can name it.
+  void s.exported;
+  const lines: string[] = [];
+  lines.push(`export type ${s.name}${s.generics} = {`);
+  for (const f of s.fields) {
+    const opt = f.optional ? "?" : "";
+    lines.push(`  ${f.name}${opt}: ${f.type};`);
+  }
+  lines.push("};");
+  return lines.join("\n");
+}
+
+// ----------------------------------------------------------------------------
+// impl → const
+// ----------------------------------------------------------------------------
+
+function emitImpl(
+  impl: M.ImplDecl,
+  struct: M.StructDecl | undefined,
+  traitImpls: readonly M.ImplDecl[],
+  registry: MacroRegistry,
+  ctx: MacroContext
+): string {
+  // impl blocks are always exported — the whole point is to expose the
+  // struct's methods to importers. Module-private impls don't carry their
+  // weight in the syntax surface.
+  const prefix = "export ";
+  void impl.exported;
+
+  // Method-body augmentations from field-constraint macros: when a field
+  // on the matching struct carries `#[minLength(1)]` (etc.), the macro
+  // emits guard statements that get prepended to the impl's `new` method.
+  const guardLines = struct ? collectGuards(struct, registry, ctx) : [];
+
+  // Derive macros: `#[derive(Clone, Equals)]` on the struct appends one
+  // method per derived trait into the impl.
+  const derivedMethods: string[] = struct ? collectDerives(struct, impl, registry, ctx) : [];
+
+  const methodTexts: string[] = [];
+  for (const m of impl.methods) {
+    methodTexts.push(renderMethod(m, m.name === "new" ? guardLines : []));
+  }
+  for (const d of derivedMethods) {
+    // Empty string means the derive only side-effected (e.g. an Event
+    // derive that only registers a module-level const). Skip the
+    // empty so we don't emit a stray `,` inside the const block.
+    if (d.trim().length > 0) methodTexts.push(d);
+  }
+  // Trait impls (`impl From<T> for Foo`, etc.) — their methods land on
+  // the target's const, after the inherent + derived methods.
+  //
+  // When multiple `impl From<T> for Foo` blocks all name their method
+  // `from`, we generate a single overloaded `from()` with typeof-based
+  // runtime discrimination instead of letting the duplicate-key
+  // collision land. The user's bodies move to `__from_<typeKey>`
+  // helpers and the synthetic `from` dispatches.
+  const fromImpls = traitImpls.filter(
+    (t) => t.traitName === "From" && t.methods.some((m) => m.name === "from")
+  );
+  const otherTraitImpls = traitImpls.filter((t) => !fromImpls.includes(t));
+
+  if (fromImpls.length >= 2) {
+    const dispatch = renderFromDispatcher(impl.name, fromImpls);
+    for (const helper of dispatch.helpers) methodTexts.push(helper);
+    methodTexts.push(dispatch.dispatcher);
+  } else {
+    for (const t of fromImpls) {
+      for (const m of t.methods) methodTexts.push(renderMethod(m, []));
+    }
+  }
+  for (const t of otherTraitImpls) {
+    for (const m of t.methods) methodTexts.push(renderMethod(m, []));
+  }
+
+  const lines: string[] = [];
+  lines.push(`${prefix}const ${impl.name} = {`);
+  for (let i = 0; i < methodTexts.length; i++) {
+    const text = methodTexts[i]!;
+    const indented = text
+      .split("\n")
+      .map((l) => (l.length > 0 ? `  ${l}` : l))
+      .join("\n");
+    lines.push(`${indented},`);
+    if (i < methodTexts.length - 1) lines.push("");
+  }
+  lines.push("};");
+  return lines.join("\n");
+}
+
+function renderMethod(m: M.ImplMethod, prependGuards: readonly string[]): string {
+  const async = m.isAsync ? "async " : "";
+  const loweredBody = lowerMatchExpressions(m.body);
+  if (prependGuards.length === 0) {
+    return `${async}${m.name}${m.signature} ${loweredBody}`;
+  }
+  // Splice the guards right after the opening `{` of the body.
+  if (!loweredBody.startsWith("{")) return `${async}${m.name}${m.signature} ${loweredBody}`;
+  const indented = prependGuards.map((g) => `  ${g}`).join("\n");
+  const newBody = `{\n${indented}\n${loweredBody.slice(1)}`;
+  return `${async}${m.name}${m.signature} ${newBody}`;
+}
+
+function collectGuards(
+  struct: M.StructDecl,
+  registry: MacroRegistry,
+  ctx: MacroContext
+): string[] {
+  const lines: string[] = [];
+
+  // Deep validation: when a field's type is another struct declared in
+  // the same module, chain through its `new` factory so its constraints
+  // run too. Cross-module struct fields opt in via `#[deep]`.
+  const sameModuleStructs = new Set<string>();
+  for (const p of ctx.module.parts) {
+    if (p.kind === "struct") sameModuleStructs.add(p.name);
+  }
+  for (const f of struct.fields) {
+    const hasDeepAttr = f.attrs.some((a) => a.name === "deep");
+    const bareType = bareIdentifier(f.type);
+    const sameModuleStruct = bareType && sameModuleStructs.has(bareType);
+    if (!hasDeepAttr && !sameModuleStruct) continue;
+    if (!bareType) continue;
+    if (f.optional) {
+      lines.push(
+        `if (data.${f.name} !== undefined) data.${f.name} = ${bareType}.new(data.${f.name});`
+      );
+    } else {
+      lines.push(`data.${f.name} = ${bareType}.new(data.${f.name});`);
+    }
+  }
+
+  for (const f of struct.fields) {
+    for (const a of f.attrs) {
+      const macro = registry.fieldConstraint(a.name);
+      if (!macro) continue;
+      for (const line of macro.emit(ctx, { struct, field: f, attr: a })) {
+        lines.push(line);
+      }
+    }
+  }
+  return lines;
+}
+
+/**
+ * Return the bare type identifier if the type text is a single
+ * PascalCase identifier (i.e. a candidate for a struct with a `new`
+ * factory). Returns undefined for primitives, arrays, generics, and
+ * unions — those need explicit handling.
+ */
+function bareIdentifier(typeText: string): string | undefined {
+  const t = typeText.trim();
+  if (!/^[A-Z][A-Za-z0-9_]*$/.test(t)) return undefined;
+  // Known JS / DOM built-ins that won't have a tsb-style `new(data)` factory.
+  const BUILTIN = new Set([
+    "Date",
+    "RegExp",
+    "Error",
+    "Map",
+    "Set",
+    "Array",
+    "Object",
+    "Promise",
+    "Number",
+    "String",
+    "Boolean",
+    "Symbol",
+    "BigInt",
+    "URL",
+    "Response",
+    "Request",
+  ]);
+  if (BUILTIN.has(t)) return undefined;
+  return t;
+}
+
+function collectDerives(
+  struct: M.StructDecl,
+  impl: M.ImplDecl,
+  registry: MacroRegistry,
+  ctx: MacroContext
+): string[] {
+  const out: string[] = [];
+  for (const a of struct.attrs) {
+    if (a.name !== "derive") continue;
+    for (const traitName of a.argList) {
+      const macro = registry.derive(traitName);
+      if (!macro) {
+        ctx.error(`unknown derive: ${traitName}`, a.span);
+        continue;
+      }
+      out.push(macro.emit(ctx, { struct, impl }));
+    }
+  }
+  return out;
+}
+
+// ----------------------------------------------------------------------------
+// function — runs function-attr macros (route verbs, etc.)
+// ----------------------------------------------------------------------------
+
+function emitFunction(
+  fn: M.FunctionDecl,
+  registry: MacroRegistry,
+  ctx: MacroContext
+): string {
+  // For each attribute that has a registered macro, apply it. Later
+  // macros see prior macros' replacements via fn.body. (Not yet wired —
+  // first wrapper wins for the prototype.)
+  for (const a of fn.attrs) {
+    const macro = registry.functionAttr(a.name);
+    if (!macro) continue;
+    const r = macro.emit(ctx, { fn, attr: a });
+    if (r.replacement.length > 0) return r.replacement;
+  }
+  return renderFunctionVerbatim(fn);
+}
+
+/**
+ * Build a unified `from()` dispatcher from multiple `impl From<T> for Foo`
+ * blocks. Each block's body becomes a `__from_<key>` helper; the
+ * dispatcher TS-overloads on every source type and discriminates at
+ * runtime by `typeof`. Non-primitive source types are handled by
+ * order-of-impl fallthrough — the last non-primitive From impl gets the
+ * `else` branch.
+ */
+function renderFromDispatcher(
+  targetName: string,
+  fromImpls: readonly M.ImplDecl[]
+): { helpers: string[]; dispatcher: string } {
+  const helpers: string[] = [];
+  const callableSignatures: string[] = [];
+  const dispatchBranches: string[] = [];
+  const sourceTypes: string[] = [];
+
+  for (let i = 0; i < fromImpls.length; i++) {
+    const t = fromImpls[i]!;
+    const sourceType = (t.traitArgs ?? "")
+      .replace(/^</, "")
+      .replace(/>$/, "")
+      .trim();
+    if (sourceType.length === 0) continue;
+    sourceTypes.push(sourceType);
+    const method = t.methods.find((m) => m.name === "from");
+    if (!method) continue;
+    const key = sanitiseTypeKey(sourceType, i);
+    const helperName = `__from_${key}`;
+    helpers.push(`${helperName}${method.signature} ${method.body}`);
+    callableSignatures.push(`(value: ${sourceType}): ${targetName};`);
+    const guard = typeofGuard(sourceType, "value");
+    if (guard) {
+      dispatchBranches.push(
+        `if (${guard}) return ${targetName}.${helperName}(value as ${sourceType});`
+      );
+    } else {
+      // Non-primitive: best-effort try-cast fallthrough.
+      dispatchBranches.push(
+        `try { return ${targetName}.${helperName}(value as ${sourceType}); } catch {}`
+      );
+    }
+  }
+
+  // Object-literal property syntax doesn't allow bare overload signatures.
+  // Instead we cast an arrow function to a callable-with-overloads type:
+  // `{ (a: X): R; (a: Y): R }` IS the overloaded function type.
+  const overloadType = `{ ${callableSignatures.join(" ")} }`;
+  const dispatcher = [
+    `from: ((value: ${sourceTypes.join(" | ")}): ${targetName} => {`,
+    ...dispatchBranches.map((b) => `  ${b}`),
+    `  throw new Error(${JSON.stringify(`${targetName}.from: no matching From impl`)});`,
+    `}) as ${overloadType}`,
+  ].join("\n");
+
+  return { helpers, dispatcher };
+}
+
+/**
+ * Return a `typeof value === "X"` check when the source type is a
+ * primitive bunny can discriminate at runtime. Undefined for object /
+ * named / union types — the dispatcher falls through to those.
+ */
+function typeofGuard(sourceType: string, valueExpr: string): string | undefined {
+  const t = sourceType.trim();
+  if (t === "string") return `typeof ${valueExpr} === "string"`;
+  if (t === "number") return `typeof ${valueExpr} === "number"`;
+  if (t === "boolean") return `typeof ${valueExpr} === "boolean"`;
+  if (t === "bigint") return `typeof ${valueExpr} === "bigint"`;
+  return undefined;
+}
+
+/** Convert a TS type text into a safe helper-method-name suffix. */
+function sanitiseTypeKey(typeText: string, fallbackIndex: number): string {
+  const cleaned = typeText.replace(/[^A-Za-z0-9_]/g, "_").replace(/^_+|_+$/g, "");
+  if (cleaned.length === 0) return `t${fallbackIndex}`;
+  return cleaned;
+}
+
+/**
+ * Build a minimal `impl Foo { new(data: Foo): Foo { return data; } }`
+ * synthetic record so derives / trait impls have a const block to land in
+ * even when the user didn't write an explicit inherent impl.
+ */
+function synthesiseInherentImpl(s: M.StructDecl): M.ImplDecl {
+  return {
+    kind: "impl",
+    name: s.name,
+    exported: true,
+    methods: [
+      {
+        name: "new",
+        signature: `(data: ${s.name}): ${s.name}`,
+        params: `data: ${s.name}`,
+        returnType: s.name,
+        body: "{ return data; }",
+        attrs: [],
+        isAsync: false,
+        span: { start: s.span.end, end: s.span.end },
+      },
+    ],
+    attrs: [],
+    span: { start: s.span.end, end: s.span.end },
+  };
+}
+
+function renderFunctionVerbatim(fn: M.FunctionDecl): string {
+  const prefix = fn.exported ? "export " : "";
+  const async = fn.isAsync ? "async " : "";
+  const body = lowerMatchExpressions(fn.body);
+  return `${prefix}${async}function ${fn.name}${fn.signature} ${body}`;
+}
+

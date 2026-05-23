@@ -1,0 +1,4 @@
+struct ProductId {
+  #[format("uuid")]
+  value: string,
+}

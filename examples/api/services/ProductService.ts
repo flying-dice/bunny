@@ -1,35 +1,24 @@
 import type { CreateProductDto } from "../dtos/CreateProductDto.ts";
-import type { Product } from "../entities/Product.ts";
-import type { ProductRepository } from "../repositories/ProductRepository.ts";
-import type { ProductId } from "../types/ProductId.ts";
-import type { IdService } from "./IdService.ts";
+import { Product } from "../entities/Product.ts";
+import { ProductId } from "../types/ProductId.ts";
+import * as repo from "../repositories/InMemoryProductRepository.ts";
 
-/**
- * Business logic. Depends on the `ProductRepository` *interface* — Bunny
- * picks the concrete `@provides ProductRepository` whose `@profile` matches
- * the active profile when `app.ts` is generated.
- *
- * @provides ProductService
- */
-export class ProductService {
-  /**
-   * @inject repo
-   * @inject ids
-   */
-  constructor(
-    private repo: ProductRepository,
-    private ids: IdService
-  ) {}
-
-  list(): Product[] {
-    return this.repo.list();
-  }
-  find(id: ProductId): Product | undefined {
-    return this.repo.find(id);
-  }
-  create(dto: CreateProductDto): Product {
-    const p: Product = { id: this.ids.next(), ...dto };
-    this.repo.add(p);
-    return p;
-  }
+export function list(): Product[] {
+  return repo.list();
 }
+
+export function find(id: string): Product | undefined {
+  return repo.find(ProductId.new({ value: id }));
+}
+
+export function create(dto: CreateProductDto): Product {
+  const product = Product.new({
+    id: ProductId.new({ value: crypto.randomUUID() }),
+    name: dto.name,
+    priceCents: dto.priceCents,
+    stock: dto.stock,
+  });
+  repo.add(product);
+  return product;
+}
+//# sourceMappingURL=ProductService.ts.map

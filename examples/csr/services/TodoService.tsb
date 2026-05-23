@@ -1,0 +1,32 @@
+import type { CreateTodoDto } from "../dtos/CreateTodoDto.ts";
+import { Todo } from "../entities/Todo.ts";
+
+const todos: Todo[] = [];
+
+export function list(): Todo[] {
+  return [...todos];
+}
+
+export function create(dto: CreateTodoDto): Todo {
+  const todo = Todo.new({
+    id: crypto.randomUUID(),
+    title: dto.title,
+    done: false,
+  });
+  todos.push(todo);
+  return todo;
+}
+
+export function toggle(id: string): Todo | undefined {
+  const t = todos.find((t) => t.id === id);
+  if (!t) return undefined;
+  t.done = !t.done;
+  return t;
+}
+
+export function remove(id: string): boolean {
+  const i = todos.findIndex((t) => t.id === id);
+  if (i < 0) return false;
+  todos.splice(i, 1);
+  return true;
+}

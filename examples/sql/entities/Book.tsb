@@ -1,0 +1,11 @@
+#[derive(Clone, Equals, ToJson)]
+struct Book {
+  #[format("uuid")]
+  id: string,
+  #[minLength(1), maxLength(200)]
+  title: string,
+  #[minLength(1), maxLength(100)]
+  author: string,
+  #[minimum(0)]
+  copies: number,
+}

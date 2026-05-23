@@ -1,0 +1,50 @@
+import type { Book } from "../entities/Book.ts";
+import { AddBookDto } from "../dtos/AddBookDto.ts";
+import * as books from "../services/BookService.ts";
+
+#[command("add", "Add a book to the library")]
+export function addBook(isbn: string, title: string, author: string, copies: number): void {
+  // `#[deep]` on AddBookDto's `isbn` field chains through Isbn.new — so
+  // we just pass the raw shape and trust AddBookDto.new to validate it.
+  const dto = AddBookDto.new({
+    isbn: { value: isbn },
+    title,
+    author,
+    copies,
+  });
+  const book = books.addBook(dto);
+  console.log(`added ${book.id}  ${book.title} — ${book.author}  (${book.copies} copies)`);
+}
+
+#[command("list", "List every book on the shelf")]
+export function listBooks(): void {
+  const all = books.list();
+  if (all.length === 0) {
+    console.log("(no books)");
+    return;
+  }
+  for (const b of all) {
+    console.log(`${b.id}  ${b.title} — ${b.author}  (${b.copies} copies)`);
+  }
+}
+
+#[command("find", "Find a book by id")]
+export function findBook(id: string): void {
+  const book = books.find(id);
+  if (!book) {
+    console.error("not found");
+    process.exit(2);
+  }
+  console.log(JSON.stringify(book, null, 2));
+}
+
+#[command("stats:count", "Show the count of books on the shelf")]
+export function statsCount(): void {
+  console.log(books.list().length);
+}
+
+#[command("stats:authors", "List unique authors")]
+export function statsAuthors(): void {
+  const seen = new Set(books.list().map((b) => b.author));
+  for (const a of [...seen].sort()) console.log(a);
+}

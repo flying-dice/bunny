@@ -1,0 +1,7 @@
+// ISBN-13 wrapper. The pattern is checked at construction time via the
+// generated `Isbn.new(...)` factory.
+
+struct Isbn {
+  #[pattern("^(?:\d{13}|(?:\d{1,5}-){3}\d|(?:\d-){4}\d{4})$")]
+  value: string,
+}

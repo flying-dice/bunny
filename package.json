@@ -6,15 +6,17 @@
     "bunny": "./src/cli.ts"
   },
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./macro": "./src/tsb/macro-api.ts"
   },
   "scripts": {
     "test": "bun test",
-    "example:api": "bun src/cli.ts -s 'examples/api/{controllers,services,repositories,entities,dtos,types}/**/*.ts' -o examples/api",
-    "example:api:prod": "bun src/cli.ts -s 'examples/api/{controllers,services,repositories,entities,dtos,types}/**/*.ts' -o examples/api --profile production",
-    "example:csr": "bun src/cli.ts -s 'examples/csr/{controllers,services,entities,dtos}/**/*.ts' -o examples/csr",
-    "example:ssr": "bun src/cli.ts -s 'examples/ssr/**/*.{ts,tsx}' -o examples/ssr",
-    "example:all": "bun run example:api && bun run example:csr && bun run example:ssr",
+    "example:api": "cd examples/api && bun ../../src/cli.ts routes -s '**/*.tsb' -o routes.ts && bun ../../src/cli.ts openapi -s '**/*.tsb' -o openapi.json",
+    "example:csr": "cd examples/csr && bun ../../src/cli.ts routes -s '**/*.tsb' -o routes.ts && bun ../../src/cli.ts client -s '**/*.tsb' -o client.ts",
+    "example:ssr": "cd examples/ssr && bun ../../src/cli.ts build -s '**/*.tsb'",
+    "example:cli": "cd examples/cli && bun ../../src/cli.ts cli -s '**/*.tsb' -o cli-app.ts",
+    "example:sql": "cd examples/sql && bun ../../src/cli.ts events -s '**/*.tsb' -o bus.ts",
+    "example:all": "bun run example:api && bun run example:csr && bun run example:ssr && bun run example:cli && bun run example:sql",
     "example:api:serve": "bun examples/api/server.ts",
     "example:csr:serve": "bun --hot examples/csr/server.ts",
     "example:ssr:serve": "bun examples/ssr/server.ts",
@@ -27,7 +29,6 @@
   "devDependencies": {
     "@biomejs/biome": "^2.4.15",
     "@types/bun": "latest",
-    "@types/rc": "^1.2.4",
     "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3"
   },
@@ -35,10 +36,7 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "openapi3-ts": "^4.5.0",
-    "rc": "^1.2.8",
     "react": "^19.2.6",
-    "react-dom": "^19.2.6",
-    "ts-morph": "^28.0.0"
+    "react-dom": "^19.2.6"
   }
 }

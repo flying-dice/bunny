@@ -1,0 +1,52 @@
+{
+  "name": "tsb-vscode",
+  "displayName": "tsb",
+  "description": "TypeScript with Rust-flavoured sugar — language support",
+  "version": "0.1.0",
+  "publisher": "flying-dice",
+  "engines": { "vscode": "^1.80.0" },
+  "categories": ["Programming Languages"],
+  "main": "./out/extension.js",
+  "activationEvents": ["onLanguage:tsb"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "tsb",
+        "aliases": ["tsb", "TSB"],
+        "extensions": [".tsb"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "tsb",
+        "scopeName": "source.tsb",
+        "path": "./syntaxes/tsb.tmLanguage.json",
+        "embeddedLanguages": {
+          "source.ts": "typescript"
+        }
+      }
+    ],
+    "configuration": {
+      "title": "tsb",
+      "properties": {
+        "tsb.lsp.path": {
+          "type": "string",
+          "default": "bunny",
+          "description": "Path to the `bunny` CLI. The extension launches it via `bunny lsp` for the language server."
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  }
+}

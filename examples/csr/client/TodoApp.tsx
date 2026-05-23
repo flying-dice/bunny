@@ -1,18 +1,17 @@
 import { type FormEvent, useCallback, useEffect, useState } from "react";
-
-interface Todo {
-  id: string;
-  title: string;
-  done: boolean;
-}
+import {
+  BunnyClientError,
+  createTodo,
+  deleteTodo,
+  listTodos,
+  toggleTodo,
+} from "../client.ts";
+import type { Todo } from "../entities/Todo.ts";
 
 /**
- * Talks to the bunny-generated TodosController over `fetch`:
- *
- *   GET    /api/todos              list
- *   POST   /api/todos              create
- *   PATCH  /api/todos/:id/toggle   toggle done
- *   DELETE /api/todos/:id          delete
+ * Talks to the bunny-generated function-style client. Each controller
+ * function (server-side) maps to a same-named typed function (client-side),
+ * so the React app and the routes evolve together at compile time.
  */
 export function TodoApp() {
   const [todos, setTodos] = useState<Todo[]>([]);
@@ -20,12 +19,10 @@ export function TodoApp() {
 
   const reload = useCallback(async () => {
     try {
-      const r = await fetch("/api/todos");
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      setTodos(await r.json());
+      setTodos(await listTodos());
       setError(null);
     } catch (e) {
-      setError(String(e));
+      setError(formatError(e));
     }
   }, []);
 
@@ -37,28 +34,31 @@ export function TodoApp() {
     e.preventDefault();
     const form = e.currentTarget;
     const data = new FormData(form);
-    const res = await fetch("/api/todos", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ title: data.get("title") }),
-    });
-    if (res.ok) {
+    try {
+      await createTodo({ title: String(data.get("title") ?? "") });
       form.reset();
-      reload();
-    } else {
-      const j = await res.json().catch(() => ({}));
-      setError(`POST /api/todos ${res.status}: ${j.reason ?? "failed"}`);
+      await reload();
+    } catch (e) {
+      setError(formatError(e));
     }
   }
 
   async function toggle(id: string) {
-    await fetch(`/api/todos/${id}/toggle`, { method: "PATCH" });
-    reload();
+    try {
+      await toggleTodo(id);
+      await reload();
+    } catch (e) {
+      setError(formatError(e));
+    }
   }
 
   async function remove(id: string) {
-    await fetch(`/api/todos/${id}`, { method: "DELETE" });
-    reload();
+    try {
+      await deleteTodo(id);
+      await reload();
+    } catch (e) {
+      setError(formatError(e));
+    }
   }
 
   return (
@@ -97,4 +97,9 @@ export function TodoApp() {
       </form>
     </section>
   );
+}
+
+function formatError(err: unknown): string {
+  if (err instanceof BunnyClientError) return err.message;
+  return err instanceof Error ? err.message : String(err);
 }

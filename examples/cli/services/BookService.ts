@@ -1,0 +1,28 @@
+// Orchestration over the repository. Stateless — the data lives in the
+// repository module; this module just composes operations.
+
+import type { AddBookDto } from "../dtos/AddBookDto.ts";
+import { Book } from "../entities/Book.ts";
+import * as repo from "../repositories/InMemoryBookRepository.ts";
+import { nextId } from "./IdService.ts";
+
+export function list(): Book[] {
+  return repo.list();
+}
+
+export function find(id: string): Book | undefined {
+  return repo.find(id);
+}
+
+export function addBook(dto: AddBookDto): Book {
+  const book = Book.new({
+    id: nextId(),
+    isbn: dto.isbn,
+    title: dto.title,
+    author: dto.author,
+    copies: dto.copies,
+  });
+  repo.add(book);
+  return book;
+}
+//# sourceMappingURL=BookService.ts.map
