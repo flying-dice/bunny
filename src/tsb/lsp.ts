@@ -506,11 +506,15 @@ function completionsAt(
   const items: CompletionItem[] = [];
 
   // Inside a `impl Trait for X { … }` body, between methods: suggest
-  // one stub per trait method that hasn't been implemented yet. These
-  // sort first; general completions still follow underneath.
+  // one stub per trait method that hasn't been implemented yet. Only
+  // method names are valid at this position in tsb, so we return
+  // exclusively stubs and suppress the generic keyword/symbol list —
+  // otherwise client-side fuzzy matchers tend to rank the stubs
+  // beneath identifier noise from the rest of the workspace.
   const implCtx = findImplBodyContext(doc, offset);
   if (implCtx) {
     addTraitMethodStubs(implCtx, doc, workspace, items);
+    if (items.length > 0) return { isIncomplete: false, items };
   }
 
   // Inside `#[derive(…)]`: suggest derive names.
