@@ -25,7 +25,7 @@
 - **Given** a field with a missing type, **when** parsed, **then** an error is reported pointing at the field.
 
 ## Transpile
-- **Given** a valid struct declaration, **when** transpiled, **then** it produces a TypeScript `type` alias plus a `const` with a `.new` constructor that validates field constraints.
+- **Given** a valid struct declaration, **when** transpiled, **then** it produces a Lua table assigned to the struct's name, sets `__index` for method dispatch, and emits a `.new(data)` factory that runs every field-constraint guard before stamping the `_struct` brand and returning the value.
 
 ## Run
 - **Given** a transpiled struct, **when** `.new(data)` is called, **then** the value carries the runtime `_struct` brand and field constraints have run.

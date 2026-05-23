@@ -512,7 +512,18 @@ function missingMessage(traitName: string, missing: TraitMethodSig[]): string {
 // Completion
 // ----------------------------------------------------------------------------
 
-const KEYWORDS = ["struct", "impl", "trait", "match", "for", "Self", "function", "export", "type", "import", "from", "as", "let", "const", "return", "if", "else", "async", "await"];
+// Mix of declaration-level keywords (used in `.neoc`'s typed surface)
+// and body-level Lua keywords (used inside method bodies and gaps).
+const KEYWORDS = [
+  // neoc declarations
+  "struct", "impl", "trait", "match", "for", "Self", "function",
+  "export", "import", "from", "as", "type",
+  // Lua control flow + bindings (used inside method bodies)
+  "local", "return", "if", "then", "else", "elseif", "end",
+  "do", "while", "repeat", "until", "in", "break",
+  // Lua literals + operators
+  "nil", "true", "false", "and", "or", "not",
+];
 const DERIVE_NAMES = ["Clone", "Equals", "ToJson", "Display", "Default", "Hash"];
 const CONSTRAINT_MACROS = ["minLength", "maxLength", "minimum", "maximum", "format", "pattern"];
 const ROUTE_MACROS = ["get", "post", "put", "patch", "delete", "head", "options"];
@@ -896,7 +907,10 @@ function addTypeCompletions(
   workspace: ReadonlyMap<string, WorkspaceSymbol>,
   items: CompletionItem[],
 ): void {
-  for (const t of ["string", "number", "boolean", "void", "any", "unknown", "never"]) {
+  // Lua primitive types — keeping just the four neoc declarations
+  // commonly annotate fields with. `void` / `any` / `unknown` / `never`
+  // were TS-only and gone.
+  for (const t of ["string", "number", "boolean", "table"]) {
     items.push({ label: t, kind: 14, detail: "primitive type" });
   }
   for (const sym of workspace.values()) {

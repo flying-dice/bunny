@@ -1,13 +1,15 @@
 name = "neoc"
 grammar = "neoc"
 path_suffixes = ["neoc"]
+# Source uses `//` and `///` — they translate to Lua `--` / `---` at
+# codegen. Keeping the source-form here so the editor's comment-toggle
+# matches what the user types.
 line_comments = ["// "]
-autoclose_before = ";:.,=}])>"
+autoclose_before = ";:.,=}])"
 brackets = [
   { start = "{", end = "}", close = true, newline = true },
   { start = "[", end = "]", close = true, newline = true },
   { start = "(", end = ")", close = true, newline = true },
   { start = "\"", end = "\"", close = true, newline = false, not_in = ["string", "comment"] },
   { start = "'", end = "'", close = true, newline = false, not_in = ["string", "comment"] },
-  { start = "`", end = "`", close = true, newline = false, not_in = ["string", "comment"] },
 ]

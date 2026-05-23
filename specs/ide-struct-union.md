@@ -13,7 +13,7 @@
 - **Given** the cursor is on a struct-union type alias, **when** hover runs, **then** the popup lists each variant.
 
 ## Transpile
-- **Given** a `type X = A | B | C` declaration, **when** transpiled, **then** the output is a TypeScript union of the three struct types.
+- **Given** a `type X = A | B | C` declaration, **when** transpiled, **then** the alias itself emits no Lua — discrimination at runtime relies on each variant's `_struct` brand.
 
 ## Run
 - **Given** a transpiled union, **when** an instance is matched on its struct identity, **then** the `_struct` brand on the runtime value drives discrimination.

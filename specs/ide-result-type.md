@@ -14,7 +14,7 @@
 - **Given** the cursor is on `Ok` or `Err`, **when** hover runs, **then** the popup shows the constructor's signature.
 
 ## Diagnostics
-- **Given** a function declared to return `Result<T, E>`, **when** any return path produces a value that isn't `Ok` or `Err`, **then** TypeScript's downstream checker reports the type error.
+- **Given** a function declared to return `Result<T, E>`, **when** any return path produces a value that isn't `Ok` or `Err`, **then** the neoc LSP reports a diagnostic at the offending return.
 
 ## Transpile
-- **Given** any neoc module, **when** transpiled, **then** the emitter injects the ambient `Result`, `Ok`, `Err`, and `ConstraintError` declarations so user code may reference them without an import.
+- **Given** any neoc module that references `Result`, `Ok`, or `Err`, **when** transpiled, **then** the emitter prepends a small Lua prelude that defines `Ok(value)` and `Err(error)` as local functions returning the canonical tagged tables.

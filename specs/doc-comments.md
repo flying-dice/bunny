@@ -13,4 +13,4 @@
 - **Given** a doc comment, an attribute block, and a declaration in source order, **when** parsed, **then** the doc still belongs to the declaration — attributes do not break the association.
 
 ## Transpile
-- **Given** a doc comment, **when** transpiled to TypeScript, **then** the comment passes through unchanged to the output.
+- **Given** a doc comment, **when** transpiled to Lua, **then** the body passes through with `///` rewritten to `---` (Lua's documentation form) and `//` rewritten to `--`.

@@ -27,7 +27,7 @@
 - **Given** an inherent `impl`, **when** there is no `for`, **then** the parser produces an `ImplDecl` with `traitName` unset.
 
 ## Transpile
-- **Given** a valid `impl` block, **when** transpiled, **then** the methods are added to the target struct's emitted const.
+- **Given** a valid `impl` block, **when** transpiled, **then** each method is emitted as `function <Struct>.<method>(...)` and attached to the struct's table.
 
 ## Run
-- **Given** a transpiled `impl`, **when** a method is invoked on an instance, **then** the corresponding TypeScript function runs.
+- **Given** a transpiled `impl`, **when** a method is invoked on an instance, **then** the corresponding Lua function runs.
