@@ -10,3 +10,18 @@ struct Product {
   #[minimum(0)]
   stock: number,
 }
+
+// A user-declared trait. The `display` method is required; `priceLabel`
+// has a default body that any `impl Display for X` inherits for free.
+trait Display {
+  display(self: Self): string;
+  priceLabel(self: Self): string {
+    return `${Self.display(self)} — see priceCents`;
+  }
+}
+
+impl Display for Product {
+  display(self: Product): string {
+    return `${self.name} (${self.stock} in stock)`;
+  }
+}

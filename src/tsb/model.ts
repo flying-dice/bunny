@@ -93,6 +93,43 @@ export interface ImplDecl {
   span: Span;
 }
 
+/**
+ * A trait declaration. Method signatures without a body are required
+ * implementations; methods with a body are defaults that `impl Trait
+ * for Foo` blocks inherit unless overridden.
+ *
+ * The trait body uses `Self` as a placeholder for the implementing
+ * type; the emitter substitutes it at impl time.
+ */
+export interface TraitDecl {
+  kind: "trait";
+  name: string;
+  exported: boolean;
+  /** Verbatim generic parameter list (`<T, U>`); empty when none. */
+  generics: string;
+  methods: TraitMethod[];
+  attrs: Attr[];
+  span: Span;
+}
+
+export interface TraitMethod {
+  name: string;
+  /** Verbatim text from the opening `(` to the end of the return type. */
+  signature: string;
+  /** Verbatim params, excluding the surrounding parens. */
+  params: string;
+  /** Return type (without the leading `:`). Empty when none. */
+  returnType: string;
+  /**
+   * Default-method body including the surrounding braces, or
+   * `undefined` when the method is signature-only (required).
+   */
+  body: string | undefined;
+  attrs: Attr[];
+  isAsync: boolean;
+  span: Span;
+}
+
 export interface FunctionDecl {
   kind: "function";
   name: string;
@@ -106,7 +143,12 @@ export interface FunctionDecl {
   span: Span;
 }
 
-export type ModulePart = OpaqueText | StructDecl | ImplDecl | FunctionDecl;
+export type ModulePart =
+  | OpaqueText
+  | StructDecl
+  | ImplDecl
+  | TraitDecl
+  | FunctionDecl;
 
 export interface Module {
   parts: ModulePart[];

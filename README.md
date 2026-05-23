@@ -175,6 +175,28 @@ export function announce(e: Event): string {
 
 Lowers to an IIFE with `if (…) return …;` chains — no runtime support code needed.
 
+### Traits
+
+Declare a contract once; implement it for many structs. The trait body lists method signatures (required) and default methods with `{}` bodies (inherited unless overridden).
+
+```tsb
+trait Display {
+  display(self: Self): string;
+  priceLabel(self: Self): string {
+    return `${Self.display(self)} — see priceCents`;
+  }
+}
+
+impl Display for Product {
+  display(self: Product): string { return self.name; }
+  // priceLabel inherits the default — `Self` is substituted with Product.
+}
+```
+
+The compiler emits a generic `interface Display<Self>` and a const-to-const assignment (`const __Product_satisfies_0: Display<Product> = Product;`) so missing or mistyped trait methods surface as TS errors. Default methods are inlined onto each impl's `const` with `Self` rewritten to the concrete type — there's no runtime trait table or dynamic dispatch.
+
+Limits: same-module trait lookup only (cross-module impls work but don't fill defaults), no trait bounds in generics yet, no `dyn Trait`.
+
 ### From / Into
 
 ```tsb

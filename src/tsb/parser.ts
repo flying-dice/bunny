@@ -61,7 +61,12 @@ export function parse(source: string): M.ParseResult {
       const nextIdx = nextNonTrivia(tokens, i + 1);
       if (nextIdx !== -1 && tokens[nextIdx]!.kind === "ident") {
         const nextText = tokens[nextIdx]!.text;
-        if (nextText === "struct" || nextText === "impl" || nextText === "function") {
+        if (
+          nextText === "struct" ||
+          nextText === "impl" ||
+          nextText === "trait" ||
+          nextText === "function"
+        ) {
           flushOpaque(tok.start);
           const declStart = tok.start;
           const parsed =
@@ -69,7 +74,9 @@ export function parse(source: string): M.ParseResult {
               ? parseStruct(tokens, nextIdx, source, true, pendingAttrs, declStart, diagnostics)
               : nextText === "impl"
                 ? parseImpl(tokens, nextIdx, source, true, pendingAttrs, declStart, diagnostics)
-                : parseFunction(tokens, nextIdx, source, true, pendingAttrs, declStart, false, diagnostics);
+                : nextText === "trait"
+                  ? parseTrait(tokens, nextIdx, source, true, pendingAttrs, declStart, diagnostics)
+                  : parseFunction(tokens, nextIdx, source, true, pendingAttrs, declStart, false, diagnostics);
           parts.push(parsed.decl);
           pendingAttrs = [];
           i = parsed.next;
@@ -121,6 +128,16 @@ export function parse(source: string): M.ParseResult {
     if (tok.kind === "ident" && tok.text === "impl") {
       flushOpaque(tok.start);
       const parsed = parseImpl(tokens, i, source, false, pendingAttrs, tok.start, diagnostics);
+      parts.push(parsed.decl);
+      pendingAttrs = [];
+      i = parsed.next;
+      opaqueWriteFrom = tokens[i]?.start ?? source.length;
+      opaqueStart = opaqueWriteFrom;
+      continue;
+    }
+    if (tok.kind === "ident" && tok.text === "trait") {
+      flushOpaque(tok.start);
+      const parsed = parseTrait(tokens, i, source, false, pendingAttrs, tok.start, diagnostics);
       parts.push(parsed.decl);
       pendingAttrs = [];
       i = parsed.next;
@@ -489,6 +506,184 @@ function parseImpl(
     },
     next: closeIdx + 1,
   };
+}
+
+function parseTrait(
+  tokens: readonly Token[],
+  start: number,
+  source: string,
+  exported: boolean,
+  attrs: M.Attr[],
+  declStart: number,
+  diagnostics: M.ParseDiagnostic[]
+): { decl: M.TraitDecl; next: number } {
+  // Header: `trait Name<Generics> { ... }`
+  const nameIdx = nextNonTrivia(tokens, start + 1);
+  if (nameIdx === -1 || tokens[nameIdx]!.kind !== "ident") {
+    diagnostics.push({
+      message: "expected identifier after trait",
+      span: { start: tokens[start]!.end, end: tokens[start]!.end },
+    });
+    return { decl: emptyTrait(declStart, attrs), next: start + 1 };
+  }
+  const name = tokens[nameIdx]!.text;
+  const braceIdx = findOpener(tokens, nameIdx + 1, "lbrace");
+  if (braceIdx === -1) {
+    diagnostics.push({
+      message: "expected { after trait name",
+      span: { start: tokens[nameIdx]!.end, end: tokens[nameIdx]!.end },
+    });
+    return { decl: emptyTrait(declStart, attrs), next: nameIdx + 1 };
+  }
+  const generics = joinTexts(tokens, nameIdx + 1, braceIdx).trim();
+  const closeIdx = findMatching(tokens, braceIdx, "lbrace", "rbrace");
+  if (closeIdx === -1) {
+    diagnostics.push({
+      message: "unterminated trait body",
+      span: { start: tokens[braceIdx]!.start, end: tokens[braceIdx]!.end },
+    });
+    return { decl: emptyTrait(declStart, attrs), next: braceIdx + 1 };
+  }
+  const methods = parseTraitMethods(tokens, braceIdx + 1, closeIdx, source, diagnostics);
+  return {
+    decl: {
+      kind: "trait",
+      name,
+      exported,
+      generics,
+      methods,
+      attrs,
+      span: { start: declStart, end: tokens[closeIdx]!.end },
+    },
+    next: closeIdx + 1,
+  };
+}
+
+function emptyTrait(declStart: number, attrs: M.Attr[]): M.TraitDecl {
+  return {
+    kind: "trait",
+    name: "",
+    exported: false,
+    generics: "",
+    methods: [],
+    attrs,
+    span: { start: declStart, end: declStart },
+  };
+}
+
+/**
+ * Trait body parser. Each method is one of:
+ *
+ *   name(params): Return;            ← required (signature only)
+ *   name(params): Return { body }    ← default method
+ *
+ * Mirrors `parseImplMethods` but accepts `;` as a terminator and
+ * captures the body as `undefined` when present.
+ */
+function parseTraitMethods(
+  tokens: readonly Token[],
+  from: number,
+  to: number,
+  source: string,
+  diagnostics: M.ParseDiagnostic[]
+): M.TraitMethod[] {
+  const methods: M.TraitMethod[] = [];
+  let i = from;
+  let pendingAttrs: M.Attr[] = [];
+
+  while (i < to) {
+    const t = tokens[i]!;
+    if (isTrivia(t)) { i++; continue; }
+    if (t.kind === "attr-open") {
+      const { attrs, next } = parseAttributeBlock(tokens, i, source, diagnostics);
+      for (const a of attrs) pendingAttrs.push(a);
+      i = next;
+      continue;
+    }
+    if (t.kind === "ident") {
+      let isAsync = false;
+      let nameTokIdx = i;
+      if (t.text === "async") {
+        const next = nextNonTrivia(tokens, i + 1);
+        if (next !== -1 && next < to && tokens[next]!.kind === "ident") {
+          isAsync = true;
+          nameTokIdx = next;
+        }
+      }
+      const nameTok = tokens[nameTokIdx]!;
+      const parenIdx = nextNonTrivia(tokens, nameTokIdx + 1);
+      if (parenIdx === -1 || parenIdx >= to || tokens[parenIdx]!.kind !== "lparen") {
+        i++;
+        continue;
+      }
+      const parenClose = findMatching(tokens, parenIdx, "lparen", "rparen");
+      if (parenClose === -1 || parenClose >= to) {
+        diagnostics.push({
+          message: `unterminated params for trait method ${nameTok.text}`,
+          span: { start: parenIdx, end: parenIdx },
+        });
+        i++;
+        continue;
+      }
+
+      // After the params, scan forward to either a `;` (signature-only)
+      // or a `{` (default-method body).
+      let termIdx = -1;
+      let termKind: "semi" | "lbrace" | undefined;
+      for (let j = parenClose + 1; j < to; j++) {
+        const k = tokens[j]!.kind;
+        if (k === "semi") { termIdx = j; termKind = "semi"; break; }
+        if (k === "lbrace") { termIdx = j; termKind = "lbrace"; break; }
+      }
+      if (termIdx === -1) {
+        diagnostics.push({
+          message: `expected ; or { after trait method ${nameTok.text}`,
+          span: { start: nameTok.start, end: nameTok.end },
+        });
+        i++;
+        continue;
+      }
+
+      const params = joinTexts(tokens, parenIdx + 1, parenClose);
+      let returnType = "";
+      const colonIdx = findNonTriviaOfKind(tokens, parenClose + 1, termIdx, "colon");
+      if (colonIdx !== -1) {
+        returnType = joinTexts(tokens, colonIdx + 1, termIdx).trim();
+      }
+      const signature = joinTexts(tokens, parenIdx, termIdx).trim();
+      let body: string | undefined;
+      let nextIdx = termIdx + 1;
+      if (termKind === "lbrace") {
+        const bodyClose = findMatching(tokens, termIdx, "lbrace", "rbrace");
+        if (bodyClose === -1 || bodyClose >= to) {
+          diagnostics.push({
+            message: `unterminated default body for trait method ${nameTok.text}`,
+            span: { start: termIdx, end: termIdx },
+          });
+          i++;
+          continue;
+        }
+        body = joinTexts(tokens, termIdx, bodyClose + 1);
+        nextIdx = bodyClose + 1;
+      }
+
+      methods.push({
+        name: nameTok.text,
+        signature,
+        params,
+        returnType,
+        body,
+        attrs: pendingAttrs,
+        isAsync,
+        span: { start: nameTok.start, end: tokens[nextIdx - 1]!.end },
+      });
+      pendingAttrs = [];
+      i = nextIdx;
+      continue;
+    }
+    i++;
+  }
+  return methods;
 }
 
 function emptyImpl(declStart: number, attrs: M.Attr[]): M.ImplDecl {

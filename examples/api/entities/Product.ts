@@ -33,5 +33,23 @@ export const Product = {
   toJson(self: Product): string { return JSON.stringify(self); },
     
     fromJson(input: string): Product { return Product.new(JSON.parse(input) as Product); },
+
+  display(self: Product): string {
+      return `${self.name} (${self.stock} in stock)`;
+    },
+
+  priceLabel(self: Product): string {
+      return `${Product.display(self)} — see priceCents`;
+    },
 };
+const __Product_satisfies_0: Display<Product> = Product; void __Product_satisfies_0;
+
+// A user-declared trait. The `display` method is required; `priceLabel`
+// has a default body that any `impl Display for X` inherits for free.
+export interface Display<Self> {
+  display(self: Self): string;
+  priceLabel(self: Self): string;
+}
+
+
 //# sourceMappingURL=Product.ts.map

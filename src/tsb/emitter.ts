@@ -92,8 +92,10 @@ export function emit(
   // Build a name → struct lookup so derive macros can read fields when
   // expanding inside the matching impl.
   const structByName = new Map<string, M.StructDecl>();
+  const traitByName = new Map<string, M.TraitDecl>();
   for (const p of module.parts) {
     if (p.kind === "struct") structByName.set(p.name, p);
+    else if (p.kind === "trait") traitByName.set(p.name, p);
   }
 
   // Group trait-impls by their target struct so they fold into the
@@ -140,7 +142,7 @@ export function emit(
         if (synth) {
           push("\n", part.span.start);
           push(
-            emitImpl(synth, part, traitImplsByTarget.get(part.name) ?? [], registry, ctx),
+            emitImpl(synth, part, traitImplsByTarget.get(part.name) ?? [], registry, ctx, traitByName),
             part.span.start
           );
         }
@@ -149,9 +151,12 @@ export function emit(
       case "impl":
         if (part.traitName) break;
         push(
-          emitImpl(part, structByName.get(part.name), traitImplsByTarget.get(part.name) ?? [], registry, ctx),
+          emitImpl(part, structByName.get(part.name), traitImplsByTarget.get(part.name) ?? [], registry, ctx, traitByName),
           part.span.start
         );
+        break;
+      case "trait":
+        push(emitTrait(part), part.span.start);
         break;
       case "function":
         push(emitFunction(part, registry, ctx), part.span.start);
@@ -189,6 +194,29 @@ export function emit(
 // struct → type
 // ----------------------------------------------------------------------------
 
+/**
+ * Emit a `trait Name<G> { … }` as a generic TS interface. The first
+ * generic parameter is always `Self` (the implementing type) so the
+ * `self: Self` receiver typechecks. User-declared generics follow.
+ *
+ * Method bodies (default implementations) live on the impl side — the
+ * interface only carries signatures.
+ */
+function emitTrait(t: M.TraitDecl): string {
+  const generics = t.generics.trim();
+  const inner = generics.length === 0 ? "Self" : `Self, ${generics.replace(/^<|>$/g, "")}`;
+  const lines: string[] = [];
+  lines.push(`export interface ${t.name}<${inner}> {`);
+  for (const m of t.methods) {
+    const async = m.isAsync ? "async " : "";
+    // Keep Self verbatim — the user's `self: Self` already references it.
+    const sig = m.signature.trim();
+    lines.push(`  ${async}${m.name}${sig};`);
+  }
+  lines.push("}");
+  return lines.join("\n");
+}
+
 function emitStruct(s: M.StructDecl): string {
   // structs always export their type — same convention as `impl`. The
   // value identity (a struct = a publicly addressable data shape) only
@@ -213,7 +241,8 @@ function emitImpl(
   struct: M.StructDecl | undefined,
   traitImpls: readonly M.ImplDecl[],
   registry: MacroRegistry,
-  ctx: MacroContext
+  ctx: MacroContext,
+  traitByName: ReadonlyMap<string, M.TraitDecl>
 ): string {
   // impl blocks are always exported — the whole point is to expose the
   // struct's methods to importers. Module-private impls don't carry their
@@ -266,6 +295,30 @@ function emitImpl(
     for (const m of t.methods) methodTexts.push(renderMethod(m, []));
   }
 
+  // Fill in default methods from the trait declaration for any methods
+  // the impl didn't supply. Same-module traits only — cross-module
+  // defaults can't be resolved without a module-graph pass.
+  const satisfiesParts: string[] = [];
+  for (const t of traitImpls) {
+    if (!t.traitName) continue;
+    const trait = traitByName.get(t.traitName);
+    if (trait) {
+      const providedNames = new Set(t.methods.map((m) => m.name));
+      for (const tm of trait.methods) {
+        if (providedNames.has(tm.name)) continue;
+        if (tm.body === undefined) continue; // required method not provided
+        methodTexts.push(renderTraitDefault(tm, impl.name));
+      }
+    }
+    // Build the `satisfies <Trait>[<Args>]` suffix segment. The
+    // trait's interface is generic in `Self` so we always supply the
+    // target name as the first generic arg; any user-supplied
+    // `<string>` etc. follow.
+    const userArgs = (t.traitArgs ?? "").trim().replace(/^<|>$/g, "").trim();
+    const args = userArgs.length > 0 ? `${impl.name}, ${userArgs}` : impl.name;
+    satisfiesParts.push(`${t.traitName}<${args}>`);
+  }
+
   const lines: string[] = [];
   lines.push(`${prefix}const ${impl.name} = {`);
   for (let i = 0; i < methodTexts.length; i++) {
@@ -278,7 +331,28 @@ function emitImpl(
     if (i < methodTexts.length - 1) lines.push("");
   }
   lines.push("};");
+  // Compile-time trait conformance: assign the const into the trait
+  // type. Unlike `satisfies` on an object literal, a const-to-const
+  // assignment skips excess-property checking, so extra methods (like
+  // `new`) don't fail — but missing or mistyped trait methods still
+  // surface as TS errors.
+  for (let s = 0; s < satisfiesParts.length; s++) {
+    lines.push(
+      `const __${impl.name}_satisfies_${s}: ${satisfiesParts[s]!} = ${impl.name}; void __${impl.name}_satisfies_${s};`
+    );
+  }
   return lines.join("\n");
+}
+
+/**
+ * Inline a trait's default method onto the target's const, substituting
+ * `Self` with the concrete type name throughout the signature + body.
+ */
+function renderTraitDefault(m: M.TraitMethod, targetName: string): string {
+  const async = m.isAsync ? "async " : "";
+  const signature = m.signature.replace(/\bSelf\b/g, targetName);
+  const body = (m.body ?? "").replace(/\bSelf\b/g, targetName);
+  return `${async}${m.name}${signature} ${body}`;
 }
 
 function renderMethod(m: M.ImplMethod, prependGuards: readonly string[]): string {
