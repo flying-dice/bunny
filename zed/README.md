@@ -13,6 +13,17 @@ Until this ships to Zed's extension registry, install it as a local dev extensio
 
 Zed compiles the Rust crate to WebAssembly and registers the extension. The first install takes ~15s; subsequent reloads are cached.
 
+### If TypeScript highlighting breaks after install
+
+`v0.1.0` shipped a tree-sitter grammar named `typescript`, which collided with Zed's built-in TS grammar and broke `.ts` highlighting editor-wide. `v0.2.0` renamed it to the extension-scoped `tsb` and added `languages/tsb/highlights.scm` so tsb files highlight on their own.
+
+Recover by:
+
+1. Open the extensions panel (`cmd-shift-x` / **zed: extensions**).
+2. Uninstall the `tsb` extension.
+3. Restart Zed once to fully drop the cached grammar.
+4. Re-install via **zed: install dev extension** pointing at this `zed/` directory.
+
 ## How the LSP gets launched
 
 The extension looks for the server in this order:

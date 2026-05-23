@@ -1,7 +1,7 @@
 id = "tsb"
 name = "tsb"
 description = "TypeScript with Rust-flavoured sugar — language support."
-version = "0.1.0"
+version = "0.2.0"
 schema_version = 1
 authors = ["Jonathan Turnock"]
 repository = "https://github.com/flying-dice/bun-oas"
@@ -10,7 +10,10 @@ repository = "https://github.com/flying-dice/bun-oas"
 name = "tsb"
 languages = ["tsb"]
 
-[grammars.typescript]
+# Ship the TypeScript tree-sitter grammar under a tsb-scoped name so
+# it can't collide with Zed's built-in `typescript` grammar (which
+# previously broke TS highlighting editor-wide).
+[grammars.tsb]
 repository = "https://github.com/tree-sitter/tree-sitter-typescript"
 commit = "d847898fec3fe596798c9fda55cb8c05a799001a"
 path = "typescript"
