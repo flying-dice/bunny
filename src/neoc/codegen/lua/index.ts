@@ -244,9 +244,7 @@ function emitImpls(
       for (const dm of trait.methods) {
         if (dm.body === undefined) continue;
         if (supplied.has(dm.name)) continue;
-        // Substitute `Self` → target name in the default body.
-        const body = dm.body.replace(/\bSelf\b/g, target);
-        out.push(`function ${target}.${dm.name}${dm.signature.replace(/\bSelf\b/g, target)} ${body.replace(/^\{|\}$/g, "")} end`);
+        out.push(renderTraitDefaultMethod(target, dm));
       }
     }
   }
@@ -255,13 +253,27 @@ function emitImpls(
 }
 
 function renderMethod(target: string, m: M.ImplMethod): string {
-  // Convert `(self: T, x: number): number { body }` → Lua function.
-  // Lua doesn't have type annotations — strip them when rendering.
   const paramNames = parseParamNames(m.params);
   const paramList = paramNames.join(", ");
-  // Strip surrounding braces from the body — we add our own.
-  const body = m.body.replace(/^\s*\{|\}\s*$/g, "").trim();
-  return `function ${target}.${m.name}(${paramList})\n  ${body.replace(/\n/g, "\n  ")}\nend`;
+  const body = stripBraces(m.body);
+  return `function ${target}.${m.name}(${paramList})\n  ${indent(body)}\nend`;
+}
+
+// Trait method's default body, rendered onto the implementing struct
+// when the impl block omits an explicit override.
+function renderTraitDefaultMethod(target: string, m: M.TraitMethod): string {
+  const paramNames = parseParamNames(m.params);
+  const paramList = paramNames.join(", ");
+  const body = stripBraces(m.body ?? "").replace(/\bSelf\b/g, target);
+  return `function ${target}.${m.name}(${paramList})\n  ${indent(body)}\nend`;
+}
+
+function stripBraces(body: string): string {
+  return body.replace(/^\s*\{|\}\s*$/g, "").trim();
+}
+
+function indent(body: string): string {
+  return body.replace(/\n/g, "\n  ");
 }
 
 // ----------------------------------------------------------------------------
@@ -271,9 +283,9 @@ function renderMethod(target: string, m: M.ImplMethod): string {
 function emitFunction(fn: M.FunctionDecl): string {
   const paramNames = parseParamNames(fn.params);
   const paramList = paramNames.join(", ");
-  const body = fn.body.replace(/^\s*\{|\}\s*$/g, "").trim();
+  const body = stripBraces(fn.body);
   const prefix = fn.exported ? "function" : "local function";
-  return `${prefix} ${fn.name}(${paramList})\n  ${body.replace(/\n/g, "\n  ")}\nend\n`;
+  return `${prefix} ${fn.name}(${paramList})\n  ${indent(body)}\nend\n`;
 }
 
 // ----------------------------------------------------------------------------
@@ -304,12 +316,22 @@ function parseParamNames(raw: string): string[] {
   return out;
 }
 
-// Translate the JS-style comment syntax that lives in OpaqueText gaps
-// (doc comments above declarations, the `//`-line comments inside
-// method bodies) to Lua's `--` form. Anything that doesn't look like a
-// comment passes through unchanged.
+// Translate JS-flavoured constructs that live in OpaqueText gaps —
+// doc comments above declarations, `//` line comments, and ES-style
+// `import { … } from "…"` statements — into their Lua equivalents.
+// Anything else passes through unchanged.
 function translateOpaque(text: string): string {
-  return text
+  let out = text.replace(IMPORT_RE, (_match, names: string, modulePath: string) => {
+    return renderImport(names, modulePath);
+  });
+  out = out.replace(IMPORT_TYPE_RE, "");
+  out = out.replace(NAMESPACE_IMPORT_RE, (_match, alias: string, modulePath: string) => {
+    return `local ${alias} = require(${luaModuleString(modulePath)})`;
+  });
+  out = out.replace(DEFAULT_IMPORT_RE, (_match, alias: string, modulePath: string) => {
+    return `local ${alias} = require(${luaModuleString(modulePath)})`;
+  });
+  return out
     .split("\n")
     .map((line) => {
       const trimmed = line.replace(/^\s+/, "");
@@ -322,6 +344,44 @@ function translateOpaque(text: string): string {
       return line;
     })
     .join("\n");
+}
+
+// `import { Foo, Bar as B } from "./mod"` →
+//   local __mod = require("./mod")
+//   local Foo = __mod.Foo
+//   local B = __mod.Bar
+const IMPORT_RE = /\bimport\s*\{\s*([^}]*?)\s*\}\s*from\s*['"]([^'"]+)['"]\s*;?/g;
+// `import type { … } from "…"` — type-only, no runtime effect, drop entirely.
+const IMPORT_TYPE_RE = /\bimport\s+type\s*\{\s*[^}]*?\s*\}\s*from\s*['"][^'"]+['"]\s*;?/g;
+// `import * as Foo from "./mod"` → local Foo = require("./mod")
+const NAMESPACE_IMPORT_RE = /\bimport\s*\*\s*as\s+(\w+)\s*from\s*['"]([^'"]+)['"]\s*;?/g;
+// `import Foo from "./mod"` → local Foo = require("./mod")
+const DEFAULT_IMPORT_RE = /\bimport\s+(\w+)\s+from\s*['"]([^'"]+)['"]\s*;?/g;
+
+function renderImport(namesRaw: string, modulePath: string): string {
+  const entries = namesRaw.split(",").map((s) => s.trim()).filter(Boolean);
+  if (entries.length === 0) return "";
+  const modVar = "__mod_" + Math.random().toString(36).slice(2, 8);
+  const lines: string[] = [`local ${modVar} = require(${luaModuleString(modulePath)})`];
+  for (const entry of entries) {
+    // `Foo` or `Foo as Bar`
+    const aliasMatch = entry.match(/^(\w+)\s+as\s+(\w+)$/);
+    if (aliasMatch) {
+      const [, source, alias] = aliasMatch;
+      lines.push(`local ${alias} = ${modVar}.${source}`);
+    } else {
+      lines.push(`local ${entry} = ${modVar}.${entry}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+// Convert a `.neoc` (or `.ts`) module specifier into a Lua module
+// string. We strip the file extension — Lua's `require` expects a
+// module path, not a file path.
+function luaModuleString(path: string): string {
+  const stripped = path.replace(/\.(neoc|ts|lua)$/, "");
+  return `"${stripped.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
 function topLevelColon(s: string): number {

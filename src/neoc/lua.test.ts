@@ -68,6 +68,55 @@ test("impl methods attach to the struct's table as `function Foo.method`", async
   expect(lua).toContain("self.n = self.n + 1");
 });
 
+test("trait default-bodied methods land on the implementing struct", async () => {
+  const { lua } = await transpile(`
+    trait Display {
+      display(self: Self): string;
+      label(self: Self): string {
+        return "[" .. Self.display(self) .. "]"
+      }
+    }
+    struct Point { x: number, y: number }
+    impl Display for Point {
+      display(self: Point): string {
+        return self.x .. "," .. self.y
+      }
+    }
+  `);
+  // User-supplied trait method.
+  expect(lua).toContain("function Point.display(self)");
+  // Default-bodied trait method, with Self → Point.
+  expect(lua).toContain("function Point.label(self)");
+  expect(lua).toContain('return "[" .. Point.display(self) .. "]"');
+});
+
+test("`import { Foo } from \"./mod\"` translates to require + locals", async () => {
+  const { lua } = await transpile(`
+    import { Foo, Bar as B } from "./mod.neoc";
+    export function f(): void {}
+  `);
+  expect(lua).toMatch(/local __mod_\w+ = require\("\.\/mod"\)/);
+  expect(lua).toMatch(/local Foo = __mod_\w+\.Foo/);
+  expect(lua).toMatch(/local B = __mod_\w+\.Bar/);
+});
+
+test("`import type { Foo } from \"./mod\"` is dropped entirely", async () => {
+  const { lua } = await transpile(`
+    import type { Foo } from "./mod.neoc";
+    export function f(): void {}
+  `);
+  expect(lua).not.toContain("require");
+  expect(lua).not.toContain("Foo");
+});
+
+test("`import * as M from \"./mod\"` translates to a single require", async () => {
+  const { lua } = await transpile(`
+    import * as M from "./mod.neoc";
+    export function f(): void {}
+  `);
+  expect(lua).toContain(`local M = require("./mod")`);
+});
+
 test("match on a struct union lowers to a Lua IIFE", async () => {
   const { lua } = await transpile(`
     struct Cat {}
