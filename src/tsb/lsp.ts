@@ -114,6 +114,12 @@ interface WorkspaceSymbol {
    * implement. Used to seed `impl Trait for X {}` completions.
    */
   traitMethods?: TraitMethodSig[];
+  /**
+   * For struct declarations: the declared fields. Used to power
+   * `self.` / `value.` member-access completions inside impl bodies
+   * and call sites.
+   */
+  structFields?: StructFieldSig[];
 }
 
 interface TraitMethodSig {
@@ -121,6 +127,13 @@ interface TraitMethodSig {
   signature: string;
   hasDefault: boolean;
   isAsync: boolean;
+  doc?: string;
+}
+
+interface StructFieldSig {
+  name: string;
+  type: string;
+  optional: boolean;
   doc?: string;
 }
 
@@ -149,7 +162,7 @@ export async function runLsp(): Promise<void> {
       respond(msg.id!, {
         capabilities: {
           textDocumentSync: { openClose: true, change: 1 /* Full */ },
-          completionProvider: { triggerCharacters: ["#", "[", "(", "@", ":", " "] },
+          completionProvider: { triggerCharacters: ["#", "[", "(", "@", ":", " ", "."] },
           hoverProvider: true,
           definitionProvider: true,
           codeActionProvider: { codeActionKinds: ["quickfix"] },
@@ -290,6 +303,7 @@ async function harvestSymbols(
     const detail = describePart(part);
     const doc = extractDocBefore(text, part.span.start);
     const traitMethods = part.kind === "trait" ? collectTraitMethodSigs(part, text) : undefined;
+    const structFields = part.kind === "struct" ? collectStructFieldSigs(part, text) : undefined;
     out.set(key, {
       name: part.name,
       kind: part.kind,
@@ -298,6 +312,7 @@ async function harvestSymbols(
       detail,
       doc,
       traitMethods,
+      structFields,
     });
   }
 }
@@ -309,6 +324,15 @@ function collectTraitMethodSigs(trait: M.TraitDecl, text: string): TraitMethodSi
     hasDefault: m.body !== undefined,
     isAsync: m.isAsync,
     doc: extractDocBefore(text, m.span.start),
+  }));
+}
+
+function collectStructFieldSigs(struct: M.StructDecl, text: string): StructFieldSig[] {
+  return struct.fields.map((f) => ({
+    name: f.name,
+    type: f.type,
+    optional: f.optional,
+    doc: extractDocBefore(text, f.span.start),
   }));
 }
 
@@ -511,6 +535,16 @@ function completionsAt(
   // exclusively stubs and suppress the generic keyword/symbol list —
   // otherwise client-side fuzzy matchers tend to rank the stubs
   // beneath identifier noise from the rest of the workspace.
+  // `self.<word>` / `Self.<word>` member access inside any impl method.
+  const selfAccess = before.match(/\b(self|Self)\.(\w*)$/);
+  if (selfAccess) {
+    const enclosingImpl = findEnclosingImpl(doc, offset);
+    if (enclosingImpl) {
+      addStructFieldCompletions(enclosingImpl.name, doc, workspace, items);
+      return { isIncomplete: false, items };
+    }
+  }
+
   const implCtx = findImplBodyContext(doc, offset);
   if (implCtx) {
     addTraitMethodStubs(implCtx, doc, workspace, items);
@@ -564,6 +598,64 @@ interface ImplBodyContext {
   impl: M.ImplDecl;
   /** Names of methods already present in the impl block. */
   implemented: Set<string>;
+}
+
+// Return the impl declaration whose span contains `offset`, regardless
+// of whether the cursor is inside a method body or at the block's
+// top level. Used to resolve `self` / `Self` inside method bodies.
+function findEnclosingImpl(doc: DocState, offset: number): M.ImplDecl | undefined {
+  if (!doc.module) return undefined;
+  for (const part of doc.module.parts) {
+    if (part.kind !== "impl") continue;
+    if (offset < part.span.start || offset > part.span.end) continue;
+    return part;
+  }
+  return undefined;
+}
+
+function addStructFieldCompletions(
+  structName: string,
+  doc: DocState,
+  workspace: ReadonlyMap<string, WorkspaceSymbol>,
+  items: CompletionItem[],
+): void {
+  const fields = resolveStructFields(structName, doc, workspace);
+  if (!fields) return;
+  let order = 0;
+  for (const f of fields) {
+    items.push(structFieldCompletion(f, structName, order++));
+  }
+}
+
+function resolveStructFields(
+  name: string,
+  doc: DocState,
+  workspace: ReadonlyMap<string, WorkspaceSymbol>,
+): StructFieldSig[] | undefined {
+  if (doc.module) {
+    for (const part of doc.module.parts) {
+      if (part.kind === "struct" && part.name === name) {
+        return collectStructFieldSigs(part, doc.text);
+      }
+    }
+  }
+  return workspace.get(`struct:${name}`)?.structFields;
+}
+
+function structFieldCompletion(
+  f: StructFieldSig,
+  structName: string,
+  sortOrder: number,
+): CompletionItem {
+  const typeText = f.optional ? `${f.type} | undefined` : f.type;
+  const detailParts = [`${f.name}: ${typeText}`, `field of ${structName}`];
+  return {
+    label: f.name,
+    kind: 5 /* Field */,
+    detail: detailParts.join("  ·  "),
+    documentation: f.doc ? { kind: "markdown", value: f.doc } : undefined,
+    sortText: `0_${String(sortOrder).padStart(3, "0")}_${f.name}`,
+  };
 }
 
 // Cursor is inside an `impl Trait for X { … }` body, between methods
