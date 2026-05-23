@@ -59,3 +59,5 @@ zed/tree-sitter-tsb/*.wasm
 
 # Finder (MacOS) folder config
 .DS_Store
+.claude/worktrees/
+.claude/scheduled_tasks.lock
