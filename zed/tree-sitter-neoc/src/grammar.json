@@ -2134,6 +2134,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "range_expression"
+        },
+        {
+          "type": "SYMBOL",
           "name": "binary_expression"
         },
         {
@@ -2211,6 +2215,48 @@
           {
             "type": "STRING",
             "value": "?"
+          }
+        ]
+      }
+    },
+    "range_expression": {
+      "type": "PREC_LEFT",
+      "value": 4,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "FIELD",
+            "name": "start",
+            "content": {
+              "type": "SYMBOL",
+              "name": "_right_expression"
+            }
+          },
+          {
+            "type": "FIELD",
+            "name": "op",
+            "content": {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "STRING",
+                  "value": ".."
+                },
+                {
+                  "type": "STRING",
+                  "value": "..="
+                }
+              ]
+            }
+          },
+          {
+            "type": "FIELD",
+            "name": "end",
+            "content": {
+              "type": "SYMBOL",
+              "name": "_right_expression"
+            }
           }
         ]
       }
@@ -3801,6 +3847,11 @@
       "try_expression",
       "ternary_expression",
       "binary_expression"
+    ],
+    [
+      "try_expression",
+      "range_expression",
+      "ternary_expression"
     ]
   ],
   "precedences": [],

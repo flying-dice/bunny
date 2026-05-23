@@ -51,6 +51,10 @@ module.exports = grammar({
     // crosses their inner `_right_expression` branch.
     [$.try_expression, $.ternary_expression, $.unary_expression],
     [$.try_expression, $.ternary_expression, $.binary_expression],
+    // `a..b?` — the inner `b?` could either close out a range or join
+    // a ternary. Try wins inside the right end of a range; the GLR
+    // engine picks whichever leads to a complete parse.
+    [$.try_expression, $.range_expression, $.ternary_expression],
   ],
 
   rules: {
@@ -436,6 +440,7 @@ module.exports = grammar({
       $.match_expression,
       $.ternary_expression,
       $.try_expression,
+      $.range_expression,
       $.binary_expression,
       $.unary_expression,
       $.call_expression,
@@ -466,6 +471,19 @@ module.exports = grammar({
     try_expression: $ => prec(12, seq(
       $._right_expression,
       '?',
+    )),
+
+    // ----- range expression -----------------------------------------
+    //
+    // `start..end`  — exclusive on the right (Rust convention).
+    // `start..=end` — inclusive on the right.
+    //
+    // Sits below comparison (6) but above arithmetic (7) so
+    // `a + 1 .. b * 2` parses as `(a + 1)..(b * 2)`.
+    range_expression: $ => prec.left(4, seq(
+      field('start', $._right_expression),
+      field('op', choice('..', '..=')),
+      field('end', $._right_expression),
     )),
 
     // ----- match expression -----------------------------------------
