@@ -27,7 +27,10 @@ kotlin {
 tasks {
   patchPluginXml {
     sinceBuild.set(providers.gradleProperty("pluginSinceBuild"))
-    untilBuild.set(providers.gradleProperty("pluginUntilBuild"))
+    // No upper bound — the plugin only exercises stable platform APIs
+    // (file type, lexer, LSP), so capping it just locks users out of
+    // newer IDE builds without buying us anything.
+    untilBuild.set(provider { null })
   }
   // Disable the searchable-options index step — it spins up a fresh
   // IDE instance and isn't useful for a single-language plugin.
