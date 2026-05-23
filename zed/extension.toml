@@ -4,7 +4,7 @@ description = "neoc — Rust-flavoured TypeScript dialect, language support."
 version = "1.0.0"
 schema_version = 1
 authors = ["Jonathan Turnock"]
-repository = "https://github.com/flying-dice/bun-oas"
+repository = "https://github.com/flying-dice/neoc-compiler"
 
 [language_servers.neoc]
 name = "neoc"

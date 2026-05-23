@@ -1,6 +1,6 @@
 # Neoc
 
-> 🐰 A Rust-flavoured TypeScript dialect for Bun. `.neoc` files transpile to plain `.ts` — runtime has zero dependency on `@flying-dice/neoc`.
+> 🐰 A Rust-flavoured TypeScript dialect for Bun. `.neoc` files transpile to plain `.ts` — runtime has zero dependency on `@flying-dice/neoc-compiler`.
 
 Neoc adds **`struct`**, **`impl`**, **`match`**, and **`#[macro]` attributes** to TypeScript. The compiler transpiles `.neoc` → `.ts`, and each compiled file exports per-file consts (`routes`, `openapi`, `client`, `commands`, `listeners`) built from the macros in that file. You wire the app yourself by importing and spreading those consts in your `server.ts` / `cli.ts` — no project-wide assemblers, no generated wiring files, no runtime container.
 
@@ -9,7 +9,7 @@ You write `.neoc`; neoc writes `.ts`. After codegen, your app has no runtime dep
 ## Install
 
 ```bash
-bun add -d @flying-dice/neoc
+bun add -d @flying-dice/neoc-compiler
 ```
 
 Requires Bun ≥ 1.3 and TypeScript ≥ 5.
@@ -225,7 +225,7 @@ When any compiled `.ts` uses `Result`, neoc writes two shared artefacts at the b
 - `neoc.d.ts` — ambient `declare global { type Result<T, E>; type ConstraintError; function Ok; function Err; function isOk; function isErr; function unwrap; function unwrapOr; function mapResult; function mapErr; function andThen; }`. The user's tsconfig picks it up automatically; compiled files reference `Result`, `Ok`, `Err` etc. without any explicit import.
 - `neoc.runtime.ts` — installs the matching runtime on `globalThis` (idempotently, so re-imports are no-ops). Each compiled `.ts` that uses `Result` gets a single `import "<rel>/neoc.runtime.ts";` at the top to guarantee the globals exist before the module body runs.
 
-No per-file inline prelude. No runtime dependency on `@flying-dice/neoc`.
+No per-file inline prelude. No runtime dependency on `@flying-dice/neoc-compiler`.
 
 The `?` postfix operator (Rust's early-return shorthand) isn't supported yet — propagate manually with `if (!r.ok) return r;`.
 
@@ -304,7 +304,7 @@ A macro module exports an array of macros that neoc loads via `--macro`:
 
 ```ts
 // my-macros.ts
-import type { FieldConstraintMacro } from "@flying-dice/neoc/macro";
+import type { FieldConstraintMacro } from "@flying-dice/neoc-compiler/macro";
 
 const positive: FieldConstraintMacro = {
   kind: "field-constraint",
@@ -321,7 +321,7 @@ export default [positive];
 neoc compile main.neoc --macro ./my-macros.ts
 ```
 
-The `@flying-dice/neoc/macro` import resolves to a type-only module, so the macro file ships with zero runtime dependency on neoc itself.
+The `@flying-dice/neoc-compiler/macro` import resolves to a type-only module, so the macro file ships with zero runtime dependency on neoc itself.
 
 ## Examples
 

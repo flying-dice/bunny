@@ -1,5 +1,5 @@
 {
-  "name": "@flying-dice/neoc",
+  "name": "@flying-dice/neoc-compiler",
   "module": "src/index.ts",
   "type": "module",
   "bin": {

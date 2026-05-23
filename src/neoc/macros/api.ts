@@ -1,8 +1,8 @@
 /**
  * Public type-only API for authoring neoc macros. Import from
- * `@flying-dice/neoc/macro`:
+ * `@flying-dice/neoc-compiler/macro`:
  *
- *   import type { DeriveMacro, StructDecl, MacroContext } from "@flying-dice/neoc/macro";
+ *   import type { DeriveMacro, StructDecl, MacroContext } from "@flying-dice/neoc-compiler/macro";
  *
  * Re-exports the model + macro types from src/neoc. Type-only so the
  * macro author's file has zero runtime dependency on neoc — the
