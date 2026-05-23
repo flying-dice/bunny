@@ -115,6 +115,32 @@ struct Box<T> {
           (type_identifier))))))
 
 ==================
+tuple-struct newtype
+==================
+
+struct ProductId(string)
+
+---
+
+(source_file
+  (tuple_struct_declaration
+    name: (type_identifier)
+    tuple_type: (primitive_type)))
+
+==================
+exported tuple-struct newtype
+==================
+
+export struct UserId(number)
+
+---
+
+(source_file
+  (tuple_struct_declaration
+    name: (type_identifier)
+    tuple_type: (primitive_type)))
+
+==================
 inherent impl
 ==================
 

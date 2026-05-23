@@ -29,6 +29,7 @@
 ; ---- declarations -------------------------------------------------------
 
 (struct_declaration name: (type_identifier) @type)
+(tuple_struct_declaration name: (type_identifier) @type)
 (impl_declaration first: (type_identifier) @type)
 (impl_declaration target: (type_identifier) @type)
 (trait_declaration name: (type_identifier) @type)

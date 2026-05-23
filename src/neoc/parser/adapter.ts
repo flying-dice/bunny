@@ -83,6 +83,9 @@ function convertTopLevel(
     case "struct_declaration":
       parts.push(convertStruct(node as N.StructDeclarationNode, pendingAttrs));
       return;
+    case "tuple_struct_declaration":
+      parts.push(convertTupleStruct(node as N.TupleStructDeclarationNode, pendingAttrs));
+      return;
     case "impl_declaration":
       parts.push(convertImpl(node as N.ImplDeclarationNode, pendingAttrs));
       return;
@@ -156,6 +159,31 @@ function convertStruct(
     exported: node.text.startsWith("export"),
     generics: node.generics?.text ?? "",
     fields,
+    attrs: pendingAttrs,
+    span: { start: node.startIndex, end: node.endIndex },
+  };
+}
+
+// Rust-style `struct ProductId(string)` desugars to a single-field
+// struct named `value`. The shorthand has no field-attribute slots,
+// so attrs is always empty.
+function convertTupleStruct(
+  node: N.TupleStructDeclarationNode,
+  pendingAttrs: M.Attr[],
+): M.StructDecl {
+  const field: M.StructField = {
+    name: "value",
+    type: node.tuple_type.text,
+    optional: false,
+    attrs: [],
+    span: { start: node.tuple_type.startIndex, end: node.tuple_type.endIndex },
+  };
+  return {
+    kind: "struct",
+    name: node.name.text,
+    exported: node.text.startsWith("export"),
+    generics: "",
+    fields: [field],
     attrs: pendingAttrs,
     span: { start: node.startIndex, end: node.endIndex },
   };
