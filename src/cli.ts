@@ -48,7 +48,7 @@ export async function runCli(opts: RunCliOptions = {}): Promise<string[]> {
     });
   }
 
-  // `neoc compile <file.neoc> [-o out.ts]` — one-shot neoc transpile.
+  // `neoc compile <file.neoc> [-o out.lua]` — one-shot neoc transpile.
   if (cmd === "compile") {
     const input = positionals[1];
     if (!input) {
@@ -111,9 +111,9 @@ const USAGE = `\
 Usage: neoc <command> [flags]
 
 Commands:
-  build    -s <glob>... [-w]      Compile every matching .neoc to sibling .ts.
-  compile  <file.neoc> [-o out.ts] Transpile a single .neoc file.
-  lsp                             Stdio language server (used by editors).
+  build    -s <glob>... [-w]       Compile every matching .neoc to sibling .lua.
+  compile  <file.neoc> [-o out.lua] Transpile a single .neoc file.
+  lsp                              Stdio language server (used by editors).
 
 Flags:
   -h, --help                  Show this message.
@@ -121,11 +121,6 @@ Flags:
   -o, --out-dir <path>        Output path for \`compile\`.
   -w, --watch                 Watch sources and rebuild on change.
       --macro <path>          Load user-authored macros from this module. Repeatable.
-
-Wiring (routes / commands / events / openapi / client): each compiled
-.ts exports per-file \`routes\`, \`openapi\`, \`client\`, \`commands\`,
-or \`listeners\` consts. Import them in your own server.ts / cli.ts and
-spread them together — no separate assembler step.
 `;
 
 // ---------------------------------------------------------------------------
