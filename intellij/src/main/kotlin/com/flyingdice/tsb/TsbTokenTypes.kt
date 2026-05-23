@@ -21,6 +21,12 @@ object TsbTokenTypes {
   val NUMBER = TsbTokenType("NUMBER")
   val IDENTIFIER = TsbTokenType("IDENTIFIER")
   val TYPE_IDENTIFIER = TsbTokenType("TYPE_IDENTIFIER")
+  /** Identifier directly followed by `(` — function or method declaration / call. */
+  val FUNCTION = TsbTokenType("FUNCTION")
+  /** Identifier preceded by `.` and followed by `(` — method call on a receiver. */
+  val METHOD = TsbTokenType("METHOD")
+  /** Identifier preceded by `.` (no call) — field / property access. */
+  val PROPERTY = TsbTokenType("PROPERTY")
   val ATTRIBUTE = TsbTokenType("ATTRIBUTE")
   val PUNCTUATION = TsbTokenType("PUNCTUATION")
   val OPERATOR = TsbTokenType("OPERATOR")
