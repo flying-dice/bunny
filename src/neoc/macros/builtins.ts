@@ -14,6 +14,7 @@
 import type {
   DeriveMacro,
   FieldConstraintMacro,
+  FunctionAttrMacro,
   MacroRegistry,
 } from "./registry.ts";
 
@@ -27,6 +28,7 @@ export function registerBuiltins(registry: MacroRegistry): void {
   registry.register(CONSTRAINT_MINIMUM);
   registry.register(CONSTRAINT_MAXIMUM);
   registry.register(CONSTRAINT_PATTERN);
+  registry.register(TEST_MACRO);
 }
 
 // ----------------------------------------------------------------------------
@@ -156,5 +158,29 @@ const CONSTRAINT_PATTERN: FieldConstraintMacro = {
     return [
       `if not string.match(data.${field.name}, ${pat}) then error("${struct.name}.${field.name}: pattern ${pat}") end`,
     ];
+  },
+};
+
+// ----------------------------------------------------------------------------
+// Function attributes
+// ----------------------------------------------------------------------------
+
+/**
+ * `#[test]` — register a zero-argument exported function with the module's
+ * `__neoc_tests` table. The original function emits unchanged; the macro
+ * appends a registration line at module scope that the `neoc test` driver
+ * harvests when it runs the compiled `.lua`.
+ */
+const TEST_MACRO: FunctionAttrMacro = {
+  kind: "function-attr",
+  name: "test",
+  emit(ctx, { fn }) {
+    ctx.appendModule(
+      [
+        `__neoc_tests = __neoc_tests or {}`,
+        `__neoc_tests[#__neoc_tests + 1] = { name = "${fn.name}", run = ${fn.name} }`,
+      ].join("\n")
+    );
+    return { replacement: "" };
   },
 };
