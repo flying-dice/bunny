@@ -154,9 +154,16 @@ const CONSTRAINT_PATTERN: FieldConstraintMacro = {
   kind: "field-constraint",
   name: "pattern",
   emit(_ctx, { struct, field, attr }) {
-    const pat = attr.argList[0] ?? `""`;
+    // `argList[0]` is the verbatim arg text with surrounding quotes
+    // already stripped by the attribute parser. Re-quote as a Lua
+    // string literal for the embedded `string.match` call, and
+    // escape backslashes + double-quotes so Lua-pattern syntax
+    // (which uses `%` not `\`) round-trips intact.
+    const raw = attr.argList[0] ?? "";
+    const escaped = raw.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    const lit = `"${escaped}"`;
     return [
-      `if not string.match(data.${field.name}, ${pat}) then error("${struct.name}.${field.name}: pattern ${pat}") end`,
+      `if not string.match(data.${field.name}, ${lit}) then error("${struct.name}.${field.name}: pattern ${escaped}") end`,
     ];
   },
 };

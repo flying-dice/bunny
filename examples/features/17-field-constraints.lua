@@ -8,6 +8,7 @@ function User.new(data)
   if #data.name > 64 then error("User.name: maxLength 64") end
   if data.age < 0 then error("User.age: minimum 0") end
   if data.age > 150 then error("User.age: maximum 150") end
+  if not string.match(data.email, "^[%w._-]+@[%w.-]+%.[%a]+$") then error("User.email: pattern ^[%w._-]+@[%w.-]+%.[%a]+$") end
   data._struct = "User"
   setmetatable(data, User)
   return data

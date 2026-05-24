@@ -1,7 +1,7 @@
 /// The `?` postfix operator propagates the `Err` variant of a `Result`
-/// out of the enclosing function. `let v = parseInt(s)?` lowers to
-/// `local __r = parseInt(s); if not __r.ok then return __r end;
-/// local v = __r.value` — short-circuits on Err, unwraps on Ok.
+/// out of the enclosing function. `let v = expr?` lowers to
+/// `local __r = expr; if not __r.ok then return __r end;
+/// local v = __r.value` — short-circuits on `Err`, unwraps on `Ok`.
 struct ParseError { input: string }
 
 export function parseInt(s: string): Result<number, ParseError> {
@@ -10,10 +10,8 @@ export function parseInt(s: string): Result<number, ParseError> {
   return Ok(n)
 }
 
-/// Use `?` to short-circuit on parse failure. Note: the current
-/// statement-level lowering does not yet thread additional statements
-/// after the `?`-binding; callers tend to return the bound value
-/// directly or use it inline.
-export function unwrappedTwice(s: string): Result<number, ParseError> {
-  let v = parseInt(s)?
+export function addTwo(a: string, b: string): Result<number, ParseError> {
+  let x = parseInt(a)?
+  let y = parseInt(b)?
+  return Ok(x + y)
 }

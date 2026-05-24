@@ -3,9 +3,9 @@ local function Ok(value) return { ok = true, value = value } end
 local function Err(error) return { ok = false, error = error } end
 
 --- The `?` postfix operator propagates the `Err` variant of a `Result`
---- out of the enclosing function. `let v = parseInt(s)?` lowers to
---- `local __r = parseInt(s); if not __r.ok then return __r end;
---- local v = __r.value` — short-circuits on Err, unwraps on Ok.
+--- out of the enclosing function. `let v = expr?` lowers to
+--- `local __r = expr; if not __r.ok then return __r end;
+--- local v = __r.value` — short-circuits on `Err`, unwraps on `Ok`.
 local ParseError = {}
 ParseError.__index = ParseError
 function ParseError.new(data)
@@ -22,13 +22,13 @@ function parseInt(s)
 end
 
 
---- Use `?` to short-circuit on parse failure. Note: the current
---- statement-level lowering does not yet thread additional statements
---- after the `?`-binding; callers tend to return the bound value
---- directly or use it inline.
-function unwrappedTwice(s)
-  local __r = parseInt(s)
+function addTwo(a, b)
+  local __r = parseInt(a)
   if not __r.ok then return __r end
-  local v = __r.value;
+  local x = __r.value;
+    local __r_1 = parseInt(b)
+  if not __r_1.ok then return __r_1 end
+  local y = __r_1.value;
+    return Ok(x + y)
 end
 

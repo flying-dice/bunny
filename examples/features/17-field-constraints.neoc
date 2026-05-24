@@ -9,4 +9,7 @@ struct User {
   #[minimum(0)]
   #[maximum(150)]
   age: number,
+
+  #[pattern("^[%w._-]+@[%w.-]+%.[%a]+$")]
+  email: string,
 }

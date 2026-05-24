@@ -2,9 +2,9 @@
 --- identities. Each variant carries its own structured payload; the
 --- `_struct` brand discriminates at runtime.
 ---
---- Note: a `type Animal = Cat | Dog | Fish` alias is a TS-level
---- type-system construct and isn't emitted to Lua — runtime
---- discrimination relies on the per-variant `_struct` brand below.
+--- The `type Foo = A | B | C` alias is a TS-level type-system
+--- construct — it emits nothing in Lua. Runtime discrimination
+--- relies on the per-variant `_struct` brand below.
 local Cat = {}
 Cat.__index = Cat
 function Cat.new(data)
@@ -28,4 +28,6 @@ function Fish.new(data)
   setmetatable(data, Fish)
   return data
 end
+
+
 

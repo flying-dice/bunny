@@ -339,6 +339,9 @@ function translateOpaque(text: string): string {
   out = out.replace(DEFAULT_IMPORT_RE, (_match, alias: string, modulePath: string) => {
     return `local ${alias} = require(${luaModuleString(modulePath)})`;
   });
+  // `type X = …` aliases are TS-level type-system constructs — they
+  // emit no Lua. Drop them when they appear in opaque-text gaps.
+  out = out.replace(TYPE_ALIAS_RE, "");
   return out
     .split("\n")
     .map((line) => {
@@ -359,6 +362,10 @@ function translateOpaque(text: string): string {
 //   local Foo = __mod.Foo
 //   local B = __mod.Bar
 const IMPORT_RE = /\bimport\s*\{\s*([^}]*?)\s*\}\s*from\s*['"]([^'"]+)['"]\s*;?/g;
+// `type Foo = A | B | C` — match until end-of-line. The expression can
+// be a union, intersection, generic, or bare identifier; the whole line
+// is dropped in Lua output.
+const TYPE_ALIAS_RE = /^\s*type\s+\w+\s*=[^\n]*\n?/gm;
 // `import type { … } from "…"` — type-only, no runtime effect, drop entirely.
 const IMPORT_TYPE_RE = /\bimport\s+type\s*\{\s*[^}]*?\s*\}\s*from\s*['"][^'"]+['"]\s*;?/g;
 // `import * as Foo from "./mod"` → local Foo = require("./mod")

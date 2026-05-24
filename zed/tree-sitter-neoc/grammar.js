@@ -246,7 +246,11 @@ module.exports = grammar({
       field('name', $.identifier),
       optional(seq(':', field('type', $._type))),
       optional(seq('=', field('value', $._expression))),
-      ';',
+      // Trailing `;` is optional — newlines terminate the statement.
+      // Without this, tree-sitter's error recovery would extend the
+      // declaration's span across line breaks into the next statement,
+      // and lowerings like `?` would splice over code that should run.
+      optional(';'),
     ),
 
     if_statement: $ => prec.right(seq(

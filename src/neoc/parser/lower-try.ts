@@ -69,16 +69,24 @@ function collectSplices(
   if (node.kind === "variable_declaration") {
     const vd = node as N.VariableDeclarationNode;
     if (vd.value && vd.value.kind === "try_expression") {
-      const inner = innerExpressionText(vd.value as N.TryExpressionNode);
+      const tryNode = vd.value as N.TryExpressionNode;
+      const inner = innerExpressionText(tryNode);
       const name = freshName();
       const varName = vd.name.text;
       const replacement =
         `local ${name} = ${inner}\n` +
         `if not ${name}.ok then return ${name} end\n` +
         `local ${varName} = ${name}.value;`;
+      // End the splice at the try_expression's end (plus an optional
+      // trailing `;`), NOT at `vd.endIndex`. Tree-sitter's error
+      // recovery extends `variable_declaration` past the missing `;`
+      // into the next statement, which would eat code that should
+      // run after the `?`-binding.
+      let end = tryNode.endIndex - baseOffset;
+      if (bodyText[end] === ";") end += 1;
       out.push({
         start: vd.startIndex - baseOffset,
-        end: vd.endIndex - baseOffset,
+        end,
         text: replacement,
       });
       return;

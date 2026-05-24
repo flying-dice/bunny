@@ -187,17 +187,19 @@ end)
 
 test("17-field-constraints: valid input passes through", function()
   loadWith("17-field-constraints.lua", [[
-    local u = User.new({ name = "Ada", age = 36 })
+    local u = User.new({ name = "Ada", age = 36, email = "ada@example.com" })
     assert(u.name == "Ada" and u.age == 36)
   ]])
 end)
 
 test("17-field-constraints: violations raise descriptive errors", function()
   loadWith("17-field-constraints.lua", [[
-    local ok, err = pcall(User.new, { name = "", age = 36 })
+    local ok, err = pcall(User.new, { name = "", age = 36, email = "x@y.z" })
     assert(not ok and tostring(err):find("minLength", 1, true))
-    local ok2, err2 = pcall(User.new, { name = "Ada", age = 999 })
+    local ok2, err2 = pcall(User.new, { name = "Ada", age = 999, email = "x@y.z" })
     assert(not ok2 and tostring(err2):find("maximum", 1, true))
+    local ok3, err3 = pcall(User.new, { name = "Ada", age = 36, email = "not-an-email" })
+    assert(not ok3 and tostring(err3):find("pattern", 1, true))
   ]])
 end)
 
