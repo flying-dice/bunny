@@ -548,10 +548,14 @@ function bindPatternEntry(
 ): void {
   if (entry.kind === "pattern_check") return; // value check, no bind
 
+  // `pattern_shorthand` is the bare-identifier case: the binding name
+  // matches the field name. The generated type lists `children` as a
+  // single `IdentifierNode`, but the walker materialises it as an
+  // array; `entry.text` is the safe source of truth either way.
   const fieldName =
-    entry.kind === "pattern_shorthand" ? entry.children.text : entry.key.text;
+    entry.kind === "pattern_shorthand" ? entry.text : entry.key.text;
   const bindingName =
-    entry.kind === "pattern_shorthand" ? entry.children.text : entry.binding.text;
+    entry.kind === "pattern_shorthand" ? entry.text : entry.binding.text;
 
   let type: T;
   if (!decl) {
