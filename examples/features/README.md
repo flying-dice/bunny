@@ -42,16 +42,23 @@ The full language spec lives in [`specs/`](../../specs/). Each row in the table 
 
 ## Tests for the generated Lua
 
-[`run-tests.lua`](run-tests.lua) exercises every `.lua` file in this directory. For each feature:
+Tests split along two axes — **shape** (does the codegen produce the right Lua?) and **runtime** (does the emitted Lua actually work?).
 
-- **A runtime test** loads the generated `.lua` and asserts the compiled functions behave correctly (struct factories stamp the brand, `match` returns the right arm, `Result` shapes, etc.).
-- **A shape / snapshot test** reads the `.lua` as text and asserts that specific anchor lines are still produced by the codegen — catches regressions in the emitter without depending on a separate snapshot file.
+### Shape — Bun snapshots
 
-Run them directly:
+Every feature has a sibling `XX-feature.test.ts` that calls `transpile()` on the `.neoc` source and snapshots the result with `expect(lua).toMatchSnapshot()`. Snapshots live under `__snapshots__/` and are checked into git. Any change to the codegen output diffs against the stored snapshot, and an intentional change is accepted via `bun test -u`.
+
+```
+bun test examples/features
+```
+
+### Runtime — Lua test driver
+
+[`run-tests.lua`](run-tests.lua) loads each compiled `.lua` into the test scope and asserts the emitted construct actually behaves (struct factories stamp the brand, `match` returns the right arm, `Result` carries `ok`/`value`, derive macros work, field-constraint violations raise the documented error).
 
 ```
 cd examples/features
 lua run-tests.lua
 ```
 
-[`runtime.test.ts`](runtime.test.ts) wraps the same runner so `bun test` in the project root picks it up automatically. It skips with a warning when `lua` isn't on PATH (`brew install lua`).
+[`runtime.test.ts`](runtime.test.ts) wraps that runner so `bun test` in the project root picks it up automatically — skips with a warning when `lua` isn't on PATH (`brew install lua`).
