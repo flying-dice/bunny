@@ -1,3 +1,8 @@
+// Runtime bindings used by this showcase. In a real project these
+// live in a dedicated bindings file the runtime ships with; the
+// showcase declares them inline for readability.
+ext fn tostring(value: number) -> string;
+
 /// A point on a 2D plane.
 #[derive(Clone, Equals, ToTable, Display)]
 struct Point {
@@ -25,7 +30,7 @@ struct Product {
 
 impl Product {
   priceLabel(self: Product) -> string {
-    return string.format("$%.2f", self.priceCents / 100)
+    return "$" .. tostring(self.priceCents / 100)
   }
 }
 

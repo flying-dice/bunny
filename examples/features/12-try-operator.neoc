@@ -2,6 +2,10 @@
 /// out of the enclosing function. `let v = expr?` lowers to
 /// `local __r = expr; if not __r.ok then return __r end;
 /// local v = __r.value` — short-circuits on `Err`, unwraps on `Ok`.
+
+// Runtime bindings used by this example.
+ext fn tonumber(s: string) -> number;
+
 struct ParseError { input: string }
 
 pub fn parseInt(s: string) -> Result<number, ParseError> {

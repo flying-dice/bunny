@@ -2,6 +2,11 @@
 local function Ok(value) return { ok = true, value = value } end
 local function Err(error) return { ok = false, error = error } end
 
+-- Runtime bindings used by this showcase. In a real project these
+-- live in a dedicated bindings file the runtime ships with; the
+-- showcase declares them inline for readability.
+
+
 --- A point on a 2D plane.
 local Point = {}
 Point.__index = Point
@@ -52,7 +57,7 @@ function Product.new(data)
 end
 
 function Product.priceLabel(self)
-  return string.format("$%.2f", self.priceCents / 100)
+  return "$" .. tostring(self.priceCents / 100)
 end
 function Product.clone(self)
   local copy = {}

@@ -5,6 +5,10 @@
 /// Note: block-expression lowering today only handles the trivial
 /// "side-effect statement then final expression" form. Mixing
 /// `local`-bindings inside the block is a known limitation.
+
+// Runtime bindings used by this example.
+ext fn print(message: string);
+
 pub fn squared() -> number {
   local result = {
     print("evaluating the block")

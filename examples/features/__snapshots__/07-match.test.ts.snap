@@ -4,6 +4,10 @@ exports[`07-match: transpile produces the expected Lua shape 1`] = `
 "--- \`match\` is a value-yielding expression with four pattern kinds:
 --- wildcard \`_\`, literal, binding identifier, struct/object pattern.
 --- Lowers to a Lua IIFE.
+
+-- Runtime bindings used by this example.
+
+
 local Cat = {}
 Cat.__index = Cat
 function Cat.new(data)

@@ -1,6 +1,10 @@
 --- `match` is a value-yielding expression with four pattern kinds:
 --- wildcard `_`, literal, binding identifier, struct/object pattern.
 --- Lowers to a Lua IIFE.
+
+-- Runtime bindings used by this example.
+
+
 local Cat = {}
 Cat.__index = Cat
 function Cat.new(data)

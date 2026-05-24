@@ -2,6 +2,10 @@
 --- `__neoc_tests` table. `neoc test` discovers every registration
 --- across all `.neoc` files, runs each through `luau`, and reports
 --- pass/fail counts.
+
+-- Runtime bindings used by this example.
+
+
 function addition_works()
   assert(1 + 1 == 2)
 end
