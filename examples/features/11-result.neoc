@@ -9,7 +9,7 @@ struct ParseError { input: string }
 
 pub fn parsePositive(s: string) -> Result<number, ParseError> {
   let n = tonumber(s)
-  if (n == nil || n <= 0) {
+  if (n == null || n <= 0) {
     return Err(ParseError.new({ input: s }))
   }
   return Ok(n)

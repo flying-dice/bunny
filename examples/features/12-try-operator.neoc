@@ -10,7 +10,7 @@ struct ParseError { input: string }
 
 pub fn parseInt(s: string) -> Result<number, ParseError> {
   let n = tonumber(s)
-  if (n == nil) {
+  if (n == null) {
     return Err(ParseError.new({ input: s }))
   }
   return Ok(n)
