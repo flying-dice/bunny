@@ -43,6 +43,14 @@ function emitStatement(node: N.AstNode): string {
       return emitVarDecl(node as N.VariableDeclarationNode);
     case "if_statement":
       return emitIf(node as N.IfStatementNode);
+    case "for_statement":
+      return emitFor(node as N.ForStatementNode);
+    case "while_statement":
+      return emitWhile(node as N.WhileStatementNode);
+    case "break_statement":
+      return "break";
+    case "continue_statement":
+      return "goto continue";
     case "return_statement":
       return emitReturn(node as N.ReturnStatementNode);
     case "statement_block":
@@ -56,6 +64,61 @@ function emitStatement(node: N.AstNode): string {
       }
       return emitExpression(node);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Loops
+// ---------------------------------------------------------------------------
+
+/**
+ * Emit a `for name in iterable { body }` as the most natural Lua
+ * loop the iterable allows. A range literal (`a..b` / `a..=b`) maps
+ * to Lua's numeric `for i = a, b - 1 do … end` form so we don't pay
+ * for an intermediate sequence; anything else uses `for _, name in
+ * ipairs(<iter>) do … end`. The loop body always opens a fresh
+ * `do/end` block under the `for` keyword, so `break` and `continue`
+ * have an unambiguous target.
+ */
+function emitFor(node: N.ForStatementNode): string {
+  const name = node.name.text;
+  const iterable = node.iterable as N.AstNode;
+  const bodyText = emitInnerBlock(node.body as N.StatementBlockNode);
+  const bodyWithContinue = withContinueLabel(bodyText);
+
+  if (iterable.kind === "range_expression") {
+    const r = iterable as N.RangeExpressionNode;
+    const start = emitExpression(r.start as N.AstNode);
+    const endExpr = emitExpression(r.end as N.AstNode);
+    const inclusive = isInclusiveRange(r);
+    const upper = inclusive ? endExpr : `${endExpr} - 1`;
+    return `for ${name} = ${start}, ${upper} do\n${indent(bodyWithContinue)}\nend`;
+  }
+
+  return `for _, ${name} in ipairs(${emitExpression(iterable)}) do\n${indent(bodyWithContinue)}\nend`;
+}
+
+function emitWhile(node: N.WhileStatementNode): string {
+  const cond = emitExpression(node.condition as N.AstNode);
+  const bodyNode = node.body as N.AstNode[] | N.AstNode;
+  const bodyText = emitBranch(bodyNode);
+  return `while ${cond} do\n${indent(withContinueLabel(bodyText))}\nend`;
+}
+
+/**
+ * Lua has no `continue` keyword; the idiom is `goto continue` with
+ * a `::continue::` label just before the loop's `end`. We only emit
+ * the label when the body actually uses `continue`, so the common
+ * loop stays clean.
+ */
+function withContinueLabel(bodyText: string): string {
+  if (!/\bgoto continue\b/.test(bodyText)) return bodyText;
+  return `${bodyText}\n::continue::`;
+}
+
+function isInclusiveRange(node: N.RangeExpressionNode): boolean {
+  const startLocal = node.start.endIndex - node.startIndex;
+  const endLocal = node.end.startIndex - node.startIndex;
+  return node.text.slice(startLocal, endLocal).trim() === "..=";
 }
 
 function emitVarDecl(node: N.VariableDeclarationNode): string {

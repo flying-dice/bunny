@@ -99,7 +99,7 @@ export interface BindingPatternNode extends NodeBase {
 export interface BlockExpressionNode extends NodeBase {
   kind: "block_expression";
   final: ArrayLiteralNode | ArrowFunctionNode | AssignmentExpressionNode | BinaryExpressionNode | BlockExpressionNode | BooleanNode | CallExpressionNode | IdentifierNode | MatchExpressionNode | MemberExpressionNode | NullLiteralNode | NumberNode | ObjectLiteralNode | ParenthesisedExpressionNode | RangeExpressionNode | StringNode | SubscriptExpressionNode | TemplateStringNode | TernaryExpressionNode | TryExpressionNode | UnaryExpressionNode | UndefinedLiteralNode;
-  children: (ArrayLiteralNode | ArrowFunctionNode | AssignmentExpressionNode | AttributedDeclarationNode | BinaryExpressionNode | BlockExpressionNode | BooleanNode | CallExpressionNode | ExportStatementNode | ExternFunctionDeclarationNode | FunctionDeclarationNode | IdentifierNode | IfStatementNode | ImplDeclarationNode | ImportStatementNode | MatchExpressionNode | MemberExpressionNode | NullLiteralNode | NumberNode | ObjectLiteralNode | ParenthesisedExpressionNode | RangeExpressionNode | ReturnStatementNode | StatementBlockNode | StringNode | StructDeclarationNode | SubscriptExpressionNode | TemplateStringNode | TernaryExpressionNode | TraitDeclarationNode | TryExpressionNode | TupleStructDeclarationNode | TypeAliasNode | UnaryExpressionNode | UndefinedLiteralNode | VariableDeclarationNode)[];
+  children: (ArrayLiteralNode | ArrowFunctionNode | AssignmentExpressionNode | AttributedDeclarationNode | BinaryExpressionNode | BlockExpressionNode | BooleanNode | BreakStatementNode | CallExpressionNode | ContinueStatementNode | ExportStatementNode | ExternFunctionDeclarationNode | ForStatementNode | FunctionDeclarationNode | IdentifierNode | IfStatementNode | ImplDeclarationNode | ImportStatementNode | MatchExpressionNode | MemberExpressionNode | NullLiteralNode | NumberNode | ObjectLiteralNode | ParenthesisedExpressionNode | RangeExpressionNode | ReturnStatementNode | StatementBlockNode | StringNode | StructDeclarationNode | SubscriptExpressionNode | TemplateStringNode | TernaryExpressionNode | TraitDeclarationNode | TryExpressionNode | TupleStructDeclarationNode | TypeAliasNode | UnaryExpressionNode | UndefinedLiteralNode | VariableDeclarationNode | WhileStatementNode)[];
 }
 
 /** Grammar node `boolean`. */
@@ -107,11 +107,21 @@ export interface BooleanNode extends NodeBase {
   kind: "boolean";
 }
 
+/** Grammar node `break_statement`. */
+export interface BreakStatementNode extends NodeBase {
+  kind: "break_statement";
+}
+
 /** Grammar node `call_expression`. */
 export interface CallExpressionNode extends NodeBase {
   kind: "call_expression";
   arguments: ArgumentsNode;
   function: ArrayLiteralNode | ArrowFunctionNode | BinaryExpressionNode | BlockExpressionNode | BooleanNode | CallExpressionNode | IdentifierNode | MatchExpressionNode | MemberExpressionNode | NullLiteralNode | NumberNode | ObjectLiteralNode | ParenthesisedExpressionNode | RangeExpressionNode | StringNode | SubscriptExpressionNode | TemplateStringNode | TernaryExpressionNode | TryExpressionNode | UnaryExpressionNode | UndefinedLiteralNode;
+}
+
+/** Grammar node `continue_statement`. */
+export interface ContinueStatementNode extends NodeBase {
+  kind: "continue_statement";
 }
 
 /** Grammar node `export_statement`. */
@@ -128,6 +138,14 @@ export interface ExternFunctionDeclarationNode extends NodeBase {
   name: IdentifierNode;
   parameters: ArrowParametersNode;
   return_type?: ArrayTypeNode | BooleanNode | FunctionTypeNode | GenericTypeNode | NamedTypeNode | NullLiteralNode | NumberNode | ObjectTypeNode | PrimitiveTypeNode | SelfTypeNode | StringNode | TupleTypeNode | UndefinedLiteralNode | UnionTypeNode | undefined;
+}
+
+/** Grammar node `for_statement`. */
+export interface ForStatementNode extends NodeBase {
+  kind: "for_statement";
+  body: StatementBlockNode;
+  iterable: ArrayLiteralNode | ArrowFunctionNode | AssignmentExpressionNode | BinaryExpressionNode | BlockExpressionNode | BooleanNode | CallExpressionNode | IdentifierNode | MatchExpressionNode | MemberExpressionNode | NullLiteralNode | NumberNode | ObjectLiteralNode | ParenthesisedExpressionNode | RangeExpressionNode | StringNode | SubscriptExpressionNode | TemplateStringNode | TernaryExpressionNode | TryExpressionNode | UnaryExpressionNode | UndefinedLiteralNode;
+  name: IdentifierNode;
 }
 
 /** Grammar node `formal_parameter`. */
@@ -164,9 +182,9 @@ export interface GenericTypeNode extends NodeBase {
 /** Grammar node `if_statement`. */
 export interface IfStatementNode extends NodeBase {
   kind: "if_statement";
-  alternative?: (ArrayLiteralNode | ArrowFunctionNode | AssignmentExpressionNode | AttributedDeclarationNode | BinaryExpressionNode | BlockExpressionNode | BooleanNode | CallExpressionNode | ExportStatementNode | ExternFunctionDeclarationNode | FunctionDeclarationNode | IdentifierNode | IfStatementNode | ImplDeclarationNode | ImportStatementNode | MatchExpressionNode | MemberExpressionNode | NullLiteralNode | NumberNode | ObjectLiteralNode | ParenthesisedExpressionNode | RangeExpressionNode | ReturnStatementNode | StatementBlockNode | StringNode | StructDeclarationNode | SubscriptExpressionNode | TemplateStringNode | TernaryExpressionNode | TraitDeclarationNode | TryExpressionNode | TupleStructDeclarationNode | TypeAliasNode | UnaryExpressionNode | UndefinedLiteralNode | VariableDeclarationNode)[];
+  alternative?: (ArrayLiteralNode | ArrowFunctionNode | AssignmentExpressionNode | AttributedDeclarationNode | BinaryExpressionNode | BlockExpressionNode | BooleanNode | BreakStatementNode | CallExpressionNode | ContinueStatementNode | ExportStatementNode | ExternFunctionDeclarationNode | ForStatementNode | FunctionDeclarationNode | IdentifierNode | IfStatementNode | ImplDeclarationNode | ImportStatementNode | MatchExpressionNode | MemberExpressionNode | NullLiteralNode | NumberNode | ObjectLiteralNode | ParenthesisedExpressionNode | RangeExpressionNode | ReturnStatementNode | StatementBlockNode | StringNode | StructDeclarationNode | SubscriptExpressionNode | TemplateStringNode | TernaryExpressionNode | TraitDeclarationNode | TryExpressionNode | TupleStructDeclarationNode | TypeAliasNode | UnaryExpressionNode | UndefinedLiteralNode | VariableDeclarationNode | WhileStatementNode)[];
   condition: ArrayLiteralNode | ArrowFunctionNode | AssignmentExpressionNode | BinaryExpressionNode | BlockExpressionNode | BooleanNode | CallExpressionNode | IdentifierNode | MatchExpressionNode | MemberExpressionNode | NullLiteralNode | NumberNode | ObjectLiteralNode | ParenthesisedExpressionNode | RangeExpressionNode | StringNode | SubscriptExpressionNode | TemplateStringNode | TernaryExpressionNode | TryExpressionNode | UnaryExpressionNode | UndefinedLiteralNode;
-  consequence: (ArrayLiteralNode | ArrowFunctionNode | AssignmentExpressionNode | AttributedDeclarationNode | BinaryExpressionNode | BlockExpressionNode | BooleanNode | CallExpressionNode | ExportStatementNode | ExternFunctionDeclarationNode | FunctionDeclarationNode | IdentifierNode | IfStatementNode | ImplDeclarationNode | ImportStatementNode | MatchExpressionNode | MemberExpressionNode | NullLiteralNode | NumberNode | ObjectLiteralNode | ParenthesisedExpressionNode | RangeExpressionNode | ReturnStatementNode | StatementBlockNode | StringNode | StructDeclarationNode | SubscriptExpressionNode | TemplateStringNode | TernaryExpressionNode | TraitDeclarationNode | TryExpressionNode | TupleStructDeclarationNode | TypeAliasNode | UnaryExpressionNode | UndefinedLiteralNode | VariableDeclarationNode)[];
+  consequence: (ArrayLiteralNode | ArrowFunctionNode | AssignmentExpressionNode | AttributedDeclarationNode | BinaryExpressionNode | BlockExpressionNode | BooleanNode | BreakStatementNode | CallExpressionNode | ContinueStatementNode | ExportStatementNode | ExternFunctionDeclarationNode | ForStatementNode | FunctionDeclarationNode | IdentifierNode | IfStatementNode | ImplDeclarationNode | ImportStatementNode | MatchExpressionNode | MemberExpressionNode | NullLiteralNode | NumberNode | ObjectLiteralNode | ParenthesisedExpressionNode | RangeExpressionNode | ReturnStatementNode | StatementBlockNode | StringNode | StructDeclarationNode | SubscriptExpressionNode | TemplateStringNode | TernaryExpressionNode | TraitDeclarationNode | TryExpressionNode | TupleStructDeclarationNode | TypeAliasNode | UnaryExpressionNode | UndefinedLiteralNode | VariableDeclarationNode | WhileStatementNode)[];
 }
 
 /** Grammar node `impl_body`. */
@@ -354,7 +372,7 @@ export interface ShorthandPropertyNode extends NodeBase {
 /** Grammar node `source_file`. */
 export interface SourceFileNode extends NodeBase {
   kind: "source_file";
-  children: (ArrayLiteralNode | ArrowFunctionNode | AssignmentExpressionNode | AttributedDeclarationNode | BinaryExpressionNode | BlockExpressionNode | BooleanNode | CallExpressionNode | ExportStatementNode | ExternFunctionDeclarationNode | FunctionDeclarationNode | IdentifierNode | IfStatementNode | ImplDeclarationNode | ImportStatementNode | MatchExpressionNode | MemberExpressionNode | NullLiteralNode | NumberNode | ObjectLiteralNode | ParenthesisedExpressionNode | RangeExpressionNode | ReturnStatementNode | StatementBlockNode | StringNode | StructDeclarationNode | SubscriptExpressionNode | TemplateStringNode | TernaryExpressionNode | TraitDeclarationNode | TryExpressionNode | TupleStructDeclarationNode | TypeAliasNode | UnaryExpressionNode | UndefinedLiteralNode | VariableDeclarationNode)[];
+  children: (ArrayLiteralNode | ArrowFunctionNode | AssignmentExpressionNode | AttributedDeclarationNode | BinaryExpressionNode | BlockExpressionNode | BooleanNode | BreakStatementNode | CallExpressionNode | ContinueStatementNode | ExportStatementNode | ExternFunctionDeclarationNode | ForStatementNode | FunctionDeclarationNode | IdentifierNode | IfStatementNode | ImplDeclarationNode | ImportStatementNode | MatchExpressionNode | MemberExpressionNode | NullLiteralNode | NumberNode | ObjectLiteralNode | ParenthesisedExpressionNode | RangeExpressionNode | ReturnStatementNode | StatementBlockNode | StringNode | StructDeclarationNode | SubscriptExpressionNode | TemplateStringNode | TernaryExpressionNode | TraitDeclarationNode | TryExpressionNode | TupleStructDeclarationNode | TypeAliasNode | UnaryExpressionNode | UndefinedLiteralNode | VariableDeclarationNode | WhileStatementNode)[];
 }
 
 /** Grammar node `spread_element`. */
@@ -366,7 +384,7 @@ export interface SpreadElementNode extends NodeBase {
 /** Grammar node `statement_block`. */
 export interface StatementBlockNode extends NodeBase {
   kind: "statement_block";
-  children: (ArrayLiteralNode | ArrowFunctionNode | AssignmentExpressionNode | AttributedDeclarationNode | BinaryExpressionNode | BlockExpressionNode | BooleanNode | CallExpressionNode | ExportStatementNode | ExternFunctionDeclarationNode | FunctionDeclarationNode | IdentifierNode | IfStatementNode | ImplDeclarationNode | ImportStatementNode | MatchExpressionNode | MemberExpressionNode | NullLiteralNode | NumberNode | ObjectLiteralNode | ParenthesisedExpressionNode | RangeExpressionNode | ReturnStatementNode | StatementBlockNode | StringNode | StructDeclarationNode | SubscriptExpressionNode | TemplateStringNode | TernaryExpressionNode | TraitDeclarationNode | TryExpressionNode | TupleStructDeclarationNode | TypeAliasNode | UnaryExpressionNode | UndefinedLiteralNode | VariableDeclarationNode)[];
+  children: (ArrayLiteralNode | ArrowFunctionNode | AssignmentExpressionNode | AttributedDeclarationNode | BinaryExpressionNode | BlockExpressionNode | BooleanNode | BreakStatementNode | CallExpressionNode | ContinueStatementNode | ExportStatementNode | ExternFunctionDeclarationNode | ForStatementNode | FunctionDeclarationNode | IdentifierNode | IfStatementNode | ImplDeclarationNode | ImportStatementNode | MatchExpressionNode | MemberExpressionNode | NullLiteralNode | NumberNode | ObjectLiteralNode | ParenthesisedExpressionNode | RangeExpressionNode | ReturnStatementNode | StatementBlockNode | StringNode | StructDeclarationNode | SubscriptExpressionNode | TemplateStringNode | TernaryExpressionNode | TraitDeclarationNode | TryExpressionNode | TupleStructDeclarationNode | TypeAliasNode | UnaryExpressionNode | UndefinedLiteralNode | VariableDeclarationNode | WhileStatementNode)[];
 }
 
 /** Grammar node `string`. */
@@ -528,6 +546,13 @@ export interface VariableDeclarationNode extends NodeBase {
   value?: ArrayLiteralNode | ArrowFunctionNode | AssignmentExpressionNode | BinaryExpressionNode | BlockExpressionNode | BooleanNode | CallExpressionNode | IdentifierNode | MatchExpressionNode | MemberExpressionNode | NullLiteralNode | NumberNode | ObjectLiteralNode | ParenthesisedExpressionNode | RangeExpressionNode | StringNode | SubscriptExpressionNode | TemplateStringNode | TernaryExpressionNode | TryExpressionNode | UnaryExpressionNode | UndefinedLiteralNode | undefined;
 }
 
+/** Grammar node `while_statement`. */
+export interface WhileStatementNode extends NodeBase {
+  kind: "while_statement";
+  body: (ArrayLiteralNode | ArrowFunctionNode | AssignmentExpressionNode | AttributedDeclarationNode | BinaryExpressionNode | BlockExpressionNode | BooleanNode | BreakStatementNode | CallExpressionNode | ContinueStatementNode | ExportStatementNode | ExternFunctionDeclarationNode | ForStatementNode | FunctionDeclarationNode | IdentifierNode | IfStatementNode | ImplDeclarationNode | ImportStatementNode | MatchExpressionNode | MemberExpressionNode | NullLiteralNode | NumberNode | ObjectLiteralNode | ParenthesisedExpressionNode | RangeExpressionNode | ReturnStatementNode | StatementBlockNode | StringNode | StructDeclarationNode | SubscriptExpressionNode | TemplateStringNode | TernaryExpressionNode | TraitDeclarationNode | TryExpressionNode | TupleStructDeclarationNode | TypeAliasNode | UnaryExpressionNode | UndefinedLiteralNode | VariableDeclarationNode | WhileStatementNode)[];
+  condition: ArrayLiteralNode | ArrowFunctionNode | AssignmentExpressionNode | BinaryExpressionNode | BlockExpressionNode | BooleanNode | CallExpressionNode | IdentifierNode | MatchExpressionNode | MemberExpressionNode | NullLiteralNode | NumberNode | ObjectLiteralNode | ParenthesisedExpressionNode | RangeExpressionNode | StringNode | SubscriptExpressionNode | TemplateStringNode | TernaryExpressionNode | TryExpressionNode | UnaryExpressionNode | UndefinedLiteralNode;
+}
+
 /** Grammar node `block_comment`. */
 export interface BlockCommentNode extends NodeBase {
   kind: "block_comment";
@@ -610,9 +635,12 @@ export type AstNode =
   | BindingPatternNode
   | BlockExpressionNode
   | BooleanNode
+  | BreakStatementNode
   | CallExpressionNode
+  | ContinueStatementNode
   | ExportStatementNode
   | ExternFunctionDeclarationNode
+  | ForStatementNode
   | FormalParameterNode
   | FunctionDeclarationNode
   | FunctionTypeNode
@@ -671,6 +699,7 @@ export type AstNode =
   | UnaryExpressionNode
   | UnionTypeNode
   | VariableDeclarationNode
+  | WhileStatementNode
   | BlockCommentNode
   | EscapeSequenceNode
   | IdentifierNode

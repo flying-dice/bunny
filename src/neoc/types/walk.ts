@@ -93,6 +93,16 @@ function walkStatement(node: N.AstNode, ctx: InferCtx, out: Inferred): void {
       // don't leak out. Mirrors the top-level entry contract.
       inferNestedBlock(node as N.StatementBlockNode, ctx, out);
       return;
+    case "for_statement":
+      walkForStatement(node as N.ForStatementNode, ctx, out);
+      return;
+    case "while_statement":
+      walkWhileStatement(node as N.WhileStatementNode, ctx, out);
+      return;
+    case "break_statement":
+    case "continue_statement":
+      // Pure control-flow tokens — nothing to type.
+      return;
     default:
       // Anything else (expression statements, assignments, if/match
       // appearing as a statement) — treat as an expression to record.
@@ -143,6 +153,74 @@ function isConcrete(t: Type): boolean {
     default:
       return false;
   }
+}
+
+/**
+ * Walk a `for name in iterable { body }`. The loop variable's type
+ * comes from the iterable: a range expression yields a number; an
+ * array literal yields the inferred element type when uniform,
+ * Unknown otherwise. Anything more elaborate stays Unknown — once
+ * generic-application inference (Tier 3+) lands, this can read the
+ * element parameter off `Vec<T>` / `Sequence<T>` types.
+ */
+function walkForStatement(
+  node: N.ForStatementNode,
+  ctx: InferCtx,
+  out: Inferred,
+): void {
+  const iterable = node.iterable as N.AstNode;
+  walkExpr(iterable, ctx, out);
+  const elementType = inferElementType(iterable, ctx);
+  out.types.set(node.name.startIndex, elementType);
+
+  ctx.env.push();
+  try {
+    ctx.env.define(node.name.text, { type: elementType, kind: "local" });
+    for (const stmt of node.body.children ?? []) {
+      walkStatement(stmt, ctx, out);
+    }
+  } finally {
+    ctx.env.pop();
+  }
+}
+
+function walkWhileStatement(
+  node: N.WhileStatementNode,
+  ctx: InferCtx,
+  out: Inferred,
+): void {
+  walkExpr(node.condition as N.AstNode, ctx, out);
+  const body = node.body as N.AstNode[] | N.AstNode;
+  ctx.env.push();
+  try {
+    if (Array.isArray(body)) {
+      for (const stmt of body) walkStatement(stmt, ctx, out);
+    } else if (body.kind === "statement_block") {
+      for (const stmt of (body as N.StatementBlockNode).children ?? []) {
+        walkStatement(stmt, ctx, out);
+      }
+    } else {
+      walkStatement(body, ctx, out);
+    }
+  } finally {
+    ctx.env.pop();
+  }
+}
+
+function inferElementType(iterable: N.AstNode, ctx: InferCtx): Type {
+  if (iterable.kind === "range_expression") {
+    // Ranges always yield numbers; the existing infer-range case
+    // returns the sequence type, but the loop sees scalar numbers.
+    return { kind: "primitive", name: "number" };
+  }
+  if (iterable.kind === "array_literal") {
+    const arr = iterable as N.ArrayLiteralNode;
+    const items = arr.children ?? [];
+    if (items.length === 0) return UNKNOWN;
+    const first = inferExpression(items[0]! as N.AstNode, ctx);
+    return first;
+  }
+  return UNKNOWN;
 }
 
 function walkVariableDeclaration(

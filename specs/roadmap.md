@@ -2,13 +2,15 @@
 
 ## Identity
 
-neoc is a **sibling dialect** of Lua, not a superset. `.neoc` compiles to plain Lua 5.4. The grammar deliberately covers a smaller surface than full Lua — neoc owns a fixed declaration vocabulary (`struct`, `impl`, `trait`, `match`, `#[…]`, `Self`) and leaves everything else (expressions, statements, control flow inside method bodies) as opaque Lua text that the user writes directly.
+neoc is a **Rust-flavoured dialect** that targets Lua 5.4. `.neoc` compiles to plain Lua. The compiler owns the entire body grammar — declarations, statements, expressions, and control flow — and emits Lua line-by-line through an AST-driven translator.
+
+Earlier drafts framed neoc as a thin shell that delegated body syntax to Lua and treated function bodies as opaque text. That direction was abandoned: keeping inference, diagnostics, and editor tooling honest required a real body grammar. Today the user writes neoc end-to-end (`let`, `if (…) { … }`, `||`, `for x in …`, `while (…)`, `break`, `continue`, struct / impl / trait / match …) and the codegen produces the Lua equivalent.
 
 The bar for any new neoc keyword is:
 
-> **Could the user just write this in plain Lua?** If yes, it doesn't belong in the grammar.
+> **Does the construct earn its place in the AST?** A construct earns its place when it lets us provide a better diagnostic, a better inference rule, or a more natural Rust-flavoured spelling than a verbatim Lua token would. If none of those apply, prefer an `ext fn` over a new keyword.
 
-This is the same architectural lesson as TSX → TS: don't reinvent the host language. TSX inherits TS's expression grammar because Microsoft maintains the JSX productions inside `tsc`. We can't do that for Lua, so the equivalent move is to keep our additions narrow and trust the user to write Lua inside method bodies.
+Body bodies are no longer opaque — there's no escape hatch back to raw Lua syntax inside a function body. Runtime-only primitives (Lua's `string`, `table`, `math`, custom host APIs) reach the user through `ext fn` declarations, which are signature-only bindings the inference engine respects.
 
 ## Implemented today
 
@@ -23,6 +25,14 @@ This is the same architectural lesson as TSX → TS: don't reinvent the host lan
 | `Result<T, E>`, `Ok`, `Err` | Auto-prepended local prelude `{ ok = true, value = … }` / `{ ok = false, error = … }` |
 | `///` and `/** */` doc comments | Pass through translated to `---` / `--[[ … ]]` |
 | `import { … } from "./mod.neoc"` | `local __mod_xyz = require("./mod"); local Foo = __mod_xyz.Foo` |
+| `let x: T = expr` / `const x = expr` | `local x = expr` (annotation is the type-check anchor; not emitted) |
+| `if (cond) { … } else if (…) { … } else { … }` | `if cond then … elseif … then … else … end` |
+| `for x in 0..n { … }` / `for x in arr { … }` | Numeric `for x = 0, n - 1` for ranges; `for _, x in ipairs(arr)` otherwise |
+| `while (cond) { … }`, `break`, `continue` | `while cond do … end` (`continue` lowers via `goto continue` + label) |
+| `arr[i]` | `arr[(i) + 1]` so 0-based access lines up with Lua's 1-based tables |
+| `\`hello ${name}\`` template strings | `"hello " .. tostring(name)` concat |
+| `null` / `undefined` | `nil` |
+| `expr?` on a `Result` (statement or `let` position) | `local __r = …; if not __r.ok then return __r end; …` |
 
 ## What's missing — new productions for neoc
 
@@ -36,9 +46,12 @@ Each entry is sized to one future spec pair (`<feature>.md` + `ide-<feature>.md`
 
 ### Expressions
 
-- **Range expressions** — `0..n`, `0..=n`, `a..b`. Sugar that lowers to Lua's numeric `for` or a sequence iterator.
 - **Operator overloading via trait impls** — `impl Add for Money` driving `+`, `==`, `<`. Lowers to Lua metatables (`__add`, `__eq`, `__lt`).
-- **Block expressions** — `{ … final-expr }` that itself yields a value. Lowers to an IIFE.
+
+### Statements
+
+- **Length operator** — `arr.len()` or `len(arr)` mapping to Lua's `#arr`. Today users would have to declare it as an `ext fn` themselves.
+- **Compound assignment fall-back** — `+=` / `-=` etc. parse today but emit verbatim, which Lua doesn't support. Either lower to `x = x + …` or remove from the grammar.
 
 ### Type system
 

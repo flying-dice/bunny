@@ -1,0 +1,65 @@
+/// `for name in iterable { ... }`, `while (cond) { ... }`, `break`, and
+/// `continue` — the iteration constructs neoc owns natively.
+///
+/// `for x in 0..n` and `for x in 0..=n` lower to Lua's numeric `for`
+/// directly, so the loop variable is a scalar number with no
+/// intermediate sequence built. `for x in <array>` walks the array
+/// via `ipairs` and exposes the value (not the index).
+///
+/// `continue` synthesises a `::continue::` label at the bottom of the
+/// loop body — Lua has no `continue` keyword, only `goto`.
+
+pub fn sumRange() -> number {
+  let total = 0
+  for i in 0..5 {
+    total = total + i
+  }
+  return total
+}
+
+pub fn sumInclusive() -> number {
+  let total = 0
+  for i in 1..=4 {
+    total = total + i
+  }
+  return total
+}
+
+pub fn sumArray() -> number {
+  let total = 0
+  for x in [10, 20, 30] {
+    total = total + x
+  }
+  return total
+}
+
+pub fn firstOverFive() -> number {
+  for i in 0..100 {
+    if (i > 5) {
+      return i
+    }
+  }
+  return 0
+}
+
+pub fn skipThreeStopSeven() -> number {
+  let total = 0
+  for i in 1..=10 {
+    if (i == 3) {
+      continue
+    }
+    if (i > 7) {
+      break
+    }
+    total = total + i
+  }
+  return total
+}
+
+pub fn countDown() -> number {
+  let n = 5
+  while (n > 0) {
+    n = n - 1
+  }
+  return n
+}

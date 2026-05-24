@@ -218,6 +218,17 @@ test("19-doc-comments: greet returns the expected string", function()
   ]])
 end)
 
+test("20-loops: numeric for, ipairs for, while, break, continue", function()
+  loadWith("20-loops.lua", [[
+    assert(sumRange() == 0+1+2+3+4, "sumRange: got " .. tostring(sumRange()))
+    assert(sumInclusive() == 1+2+3+4, "sumInclusive: got " .. tostring(sumInclusive()))
+    assert(sumArray() == 60, "sumArray: got " .. tostring(sumArray()))
+    assert(firstOverFive() == 6, "firstOverFive: got " .. tostring(firstOverFive()))
+    assert(skipThreeStopSeven() == 1+2+4+5+6+7, "skipThreeStopSeven: got " .. tostring(skipThreeStopSeven()))
+    assert(countDown() == 0, "countDown: got " .. tostring(countDown()))
+  ]])
+end)
+
 -- =========================================================================
 
 print("")

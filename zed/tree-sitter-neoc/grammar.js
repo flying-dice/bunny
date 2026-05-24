@@ -82,6 +82,10 @@ module.exports = grammar({
       $.return_statement,
       $.variable_declaration,
       $.if_statement,
+      $.for_statement,
+      $.while_statement,
+      $.break_statement,
+      $.continue_statement,
       $.statement_block,
       seq($._expression, ';'),
     ),
@@ -278,6 +282,31 @@ module.exports = grammar({
       field('consequence', $._statement),
       optional(seq('else', field('alternative', $._statement))),
     )),
+
+    // Rust-style `for name in iterable { body }`. The iterable is any
+    // expression that produces a sequence — typically a range
+    // (`0..10`), an array literal, or a value bound to one — and the
+    // body is always a `statement_block` so `break` / `continue` have
+    // an unambiguous loop to attach to.
+    for_statement: $ => seq(
+      'for',
+      field('name', $.identifier),
+      'in',
+      field('iterable', $._expression),
+      field('body', $.statement_block),
+    ),
+
+    // `while (cond) body` — parens match `if` for visual consistency.
+    while_statement: $ => prec.right(seq(
+      'while',
+      '(',
+      field('condition', $._expression),
+      ')',
+      field('body', $._statement),
+    )),
+
+    break_statement: $ => seq('break', optional(';')),
+    continue_statement: $ => seq('continue', optional(';')),
 
     // ----- type expressions -----------------------------------------
 
