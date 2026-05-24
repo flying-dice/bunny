@@ -100,7 +100,7 @@ function apply(a, op, b)
     if __m == "+" then return Ok(a + b) end
     if __m == "-" then return Ok(a - b) end
     if __m == "*" then return Ok(a * b) end
-    if __m == "/" then return (b == 0) and Err(DivByZero.new({})) or Ok(a / b) end
+    if __m == "/" then return (((b == 0)) and (Err(DivByZero.new({  }))) or (Ok(a / b))) end
     return Err(UnknownOp.new({ op = op }))
   end)(op)
 end

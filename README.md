@@ -1,8 +1,8 @@
 # neoc-compiler
 
-A Rust-flavoured Lua dialect. `.neoc` files compile to plain Lua 5.4.
+A Rust-flavoured source language for scripting runtimes. **Lua 5.4 is the first target**; the language surface and codegen are decoupled so other targets can plug in.
 
-neoc adds **`struct`**, **`impl`**, **`trait`**, **`match`**, and **`#[macro]` attributes** to Lua. The compiler emits a single `.lua` file per `.neoc` source. The runtime that consumes the output — [neoc](https://github.com/flying-dice/neoc) — is a separate Rust + mlua project; nothing in this repo depends on it at runtime.
+neoc adds `struct`, `impl`, `trait`, `match`, and `#[macro]` attributes on top of a Rust-flavoured body grammar — `let`, `if`, `for`, `while`, `break`, `continue`, `return`, the `?` operator, template strings, ternaries. The compiler emits one target file per `.neoc` source. The first-party Lua runtime that consumes the output — [neoc](https://github.com/flying-dice/neoc) — is a separate Rust + mlua project; nothing in this repo depends on it.
 
 ## Install
 

@@ -9,6 +9,6 @@ struct Box { count: number }
 
 impl Doubler for Box {
   double(self: Box) -> Box {
-    return Box.new({ count = self.count * 2 })
+    return Box.new({ count: self.count * 2 })
   }
 }

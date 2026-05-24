@@ -15,5 +15,5 @@
 - **Given** an attribute name with no matching macro, **when** compiled, **then** a diagnostic is emitted at the attribute's span.
 
 ## Output
-- **Given** a macro's `emit`, **when** it runs at compile time, **then** the macro may add code to the struct's const, emit module-level snippets, or contribute entries to project-wide tables (`routes`, `commands`, `openapi`, `client`).
+- **Given** a macro's `emit`, **when** it runs at compile time, **then** the macro may add code to the struct's const, emit module-level snippets, or contribute entries to a project-wide table that the macro itself names.
 - **Given** a macro that targets a struct's fields, **when** it runs, **then** its check is woven into the struct's emitted `.new` constructor.

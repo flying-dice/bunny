@@ -264,7 +264,7 @@ function innerOfTry(node: N.TryExpressionNode): string {
 // Expressions
 // ---------------------------------------------------------------------------
 
-function emitExpression(node: N.AstNode | undefined): string {
+export function emitExpression(node: N.AstNode | undefined): string {
   if (!node) return "";
   switch (node.kind) {
     case "binary_expression":
@@ -444,9 +444,9 @@ function emitArrayLiteral(node: N.ArrayLiteralNode): string {
 }
 
 function emitTernary(node: N.TernaryExpressionNode): string {
-  const cond = emitExpression((node as unknown as { condition: N.AstNode }).condition);
-  const cons = emitExpression((node as unknown as { consequence: N.AstNode }).consequence);
-  const alt = emitExpression((node as unknown as { alternative: N.AstNode }).alternative);
+  const cond = emitExpression(node.cond as N.AstNode);
+  const cons = emitExpression(node.then as N.AstNode);
+  const alt = emitExpression(node.else as N.AstNode);
   return `((${cond}) and (${cons}) or (${alt}))`;
 }
 

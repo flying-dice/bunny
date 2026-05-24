@@ -9,6 +9,7 @@
  *   end)(<scrutinee>)
  */
 import type * as N from "../ast/nodes.generated.ts";
+import { emitExpression } from "./lower-body.ts";
 
 export function lowerBody(node: N.NodeBase, bodyText: string): string {
   const baseOffset = node.startIndex;
@@ -75,9 +76,14 @@ export function renderMatchAsIife(node: N.MatchExpressionNode): string {
 }
 
 function renderArm(arm: N.MatchArmNode): string {
-  const result = arm.body.text;
+  // Route the arm body and guard through the body emitter so neoc
+  // expressions land as Lua. The ES-module cycle (lower-body imports
+  // `renderMatchAsIife` from here, this module pulls `emitExpression`
+  // back) resolves cleanly because both bindings are functions —
+  // they're looked up at call time, never at module load.
+  const result = emitExpression(arm.body as N.AstNode);
   const pattern = arm.pattern;
-  const guard = arm.guard?.text;
+  const guard = arm.guard ? emitExpression(arm.guard as N.AstNode) : undefined;
 
   switch (pattern.kind) {
     case "wildcard_pattern":

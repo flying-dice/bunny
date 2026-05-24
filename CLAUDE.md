@@ -2,7 +2,7 @@
 
 Guidance for Claude (and any LLM agent) working in the **neoc-compiler** repo.
 
-> neoc-compiler — a Rust-flavoured Lua dialect. `.neoc` → plain `.lua`. The compiler ships as `@flying-dice/neoc-compiler`; the language is `neoc`; the CLI is `neoc`; the matching runtime is the separate `neoc` project (Rust + mlua).
+> neoc-compiler — a Rust-flavoured source language for scripting runtimes. Lua 5.4 is the first target (`.neoc` → `.lua`); the codegen layer is decoupled from the language surface so other targets can plug in. The compiler ships as `@flying-dice/neoc-compiler`; the language is `neoc`; the CLI is `neoc`; the matching Lua runtime is the separate `neoc` project (Rust + mlua).
 
 ---
 
@@ -77,7 +77,7 @@ Prose around a code sample stays terse. The doc comment itself stays complete. K
 
 ## Voice
 
-Direct. No marketing language. Friendly error messages that help the user, never scold. No rabbit / spring / Bun / Easter motifs — that brand belonged to an earlier life of the project when it targeted TypeScript on Bun. neoc-compiler now targets Lua; the voice is plain.
+Direct. No marketing language. Friendly error messages that help the user, never scold. No rabbit / spring / Bun / Easter motifs — that brand belonged to an earlier life of the project when it targeted TypeScript on Bun. neoc-compiler now targets scripting runtimes (Lua first); the voice is plain.
 
 ---
 

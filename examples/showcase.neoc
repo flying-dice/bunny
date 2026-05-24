@@ -12,7 +12,7 @@ struct Point {
 
 impl Point {
   translate(self: Point, dx: number, dy: number) -> Point {
-    return Point.new({ x = self.x + dx, y = self.y + dy })
+    return Point.new({ x: self.x + dx, y: self.y + dy })
   }
 }
 
@@ -44,8 +44,8 @@ pub fn apply(a: number, op: string, b: number) -> Result<number, DivByZero | Unk
     "+" => Ok(a + b),
     "-" => Ok(a - b),
     "*" => Ok(a * b),
-    "/" => (b == 0) and Err(DivByZero.new({})) or Ok(a / b),
-    _ => Err(UnknownOp.new({ op = op })),
+    "/" => (b == 0) ? Err(DivByZero.new({})) : Ok(a / b),
+    _ => Err(UnknownOp.new({ op: op })),
   }
 }
 

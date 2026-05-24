@@ -2,17 +2,19 @@
 
 ## Identity
 
-neoc is a **Rust-flavoured dialect** that targets Lua 5.4. `.neoc` compiles to plain Lua. The compiler owns the entire body grammar — declarations, statements, expressions, and control flow — and emits Lua line-by-line through an AST-driven translator.
+neoc is a **Rust-flavoured source language** for scripting runtimes. The compiler owns the entire grammar — declarations, statements, expressions, and control flow — and emits target code through an AST-driven translator. Each target backend lives behind its own codegen module; the language surface is target-agnostic.
 
-Earlier drafts framed neoc as a thin shell that delegated body syntax to Lua and treated function bodies as opaque text. That direction was abandoned: keeping inference, diagnostics, and editor tooling honest required a real body grammar. Today the user writes neoc end-to-end (`let`, `if (…) { … }`, `||`, `for x in …`, `while (…)`, `break`, `continue`, struct / impl / trait / match …) and the codegen produces the Lua equivalent.
+**Lua 5.4 is the first target.** Earlier drafts framed neoc as a thin Lua shell that delegated body syntax to Lua and treated function bodies as opaque text. That direction was abandoned: keeping inference, diagnostics, and editor tooling honest required a real body grammar, and tying the source surface to one target ruled out the others. Today the user writes neoc end-to-end (`let`, `if (…) { … }`, `||`, `for x in …`, `while (…)`, `break`, `continue`, struct / impl / trait / match …) and the active codegen produces the equivalent in whichever target dialect was selected.
 
 The bar for any new neoc keyword is:
 
-> **Does the construct earn its place in the AST?** A construct earns its place when it lets us provide a better diagnostic, a better inference rule, or a more natural Rust-flavoured spelling than a verbatim Lua token would. If none of those apply, prefer an `ext fn` over a new keyword.
+> **Does the construct earn its place in the AST?** A construct earns its place when it lets us provide a better diagnostic, a better inference rule, or a more natural Rust-flavoured spelling than a verbatim runtime token would. If none of those apply, prefer an `ext fn` over a new keyword.
 
-Body bodies are no longer opaque — there's no escape hatch back to raw Lua syntax inside a function body. Runtime-only primitives (Lua's `string`, `table`, `math`, custom host APIs) reach the user through `ext fn` declarations, which are signature-only bindings the inference engine respects.
+Bodies are no longer opaque — there's no escape hatch back to raw target syntax inside a function body. Target-only primitives (Lua's `string` / `table` / `math`, a Python target's `print` / `len`, a JS target's `console.log`, host-specific APIs of any kind) reach the user through `ext fn` declarations, which are signature-only bindings the inference engine respects. The same `.neoc` source recompiles against a different target by swapping codegen modules and the matching `ext fn` set.
 
 ## Implemented today
+
+The compiler's only shipping target is Lua 5.4. The "Lua output" column shows what each construct emits through the current codegen; a future target backend would substitute its own column.
 
 | Construct | Lua output |
 | --- | --- |
