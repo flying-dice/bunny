@@ -25,7 +25,7 @@ function labelText(hint: InlayHint): string {
 test("emits `data:` before the argument of a struct .new call", async () => {
   const source = `struct Product { id: string }
 
-function build(): Product {
+function build() -> Product {
   return Product.new({ id = "x" })
 }
 `;
@@ -43,8 +43,8 @@ function build(): Product {
   expect(params[0]!.position.character).toBe(braceCol);
 });
 
-test("emits one parameter-name hint per argument of a multi-arg function call", async () => {
-  const source = `function clamp(value: number, low: number, high: number): number {
+test("emits one parameter-name hint per argument of a multi-arg fn call", async () => {
+  const source = `fn clamp(value: number, low: number, high: number): number {
   return value
 }
 
@@ -64,7 +64,7 @@ function use(): number {
 });
 
 test("returns no hints for a call to an unknown function", async () => {
-  const source = `function use(): number {
+  const source = `fn use(): number {
   return mystery(1, 2)
 }
 `;

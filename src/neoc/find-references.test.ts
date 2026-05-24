@@ -52,7 +52,7 @@ test("returns an empty list when the cursor isn't on an identifier", async () =>
 test("returns the declaration and every same-file use of a struct name", async () => {
   const source = `struct Product { id: string }
 
-function tag(p: Product): Product {
+function tag(p: Product) -> Product {
   return p
 }
 `;
@@ -68,7 +68,7 @@ function tag(p: Product): Product {
 test("word-boundary scan ignores names embedded inside larger identifiers", async () => {
   const source = `struct Foo { id: string }
 
-function take(x: Foo): Foo { return x }
+function take(x: Foo) -> Foo { return x }
 function other(): string {
   let Foobar = "x"
   let MyFoo = "y"
@@ -100,11 +100,11 @@ function noise(): string {
 test("finds cross-file references across the workspace", async () => {
   const root = makeWorkspace({
     "entities/Product.neoc": `struct Product { id: string }\n`,
-    "controllers/list.neoc": `function list(p: Product): Product { return p }\n`,
+    "controllers/list.neoc": `fn list(p: Product) -> Product { return p }\n`,
     "unrelated.neoc": `struct Other { name: string }\n`,
   });
   try {
-    const localSource = `function tag(p: Product): Product { return p }\n`;
+    const localSource = `fn tag(p: Product) -> Product { return p }\n`;
     const d = await doc(localSource);
     const openUri = pathToFileURL(join(root, "controllers/list.neoc")).href;
     const pos = offsetOf(localSource, "Product", 0);
@@ -125,12 +125,12 @@ test("finds cross-file references across the workspace", async () => {
 
 test("does not double-count the open document when its uri is also on disk", async () => {
   const root = makeWorkspace({
-    "Foo.neoc": `struct Foo { id: string }\nfunction take(f: Foo): Foo { return f }\n`,
+    "Foo.neoc": `struct Foo { id: string }\nfunction take(f: Foo) -> Foo { return f }\n`,
   });
   try {
     const abs = join(root, "Foo.neoc");
     const uri = pathToFileURL(abs).href;
-    const source = `struct Foo { id: string }\nfunction take(f: Foo): Foo { return f }\n`;
+    const source = `struct Foo { id: string }\nfunction take(f: Foo) -> Foo { return f }\n`;
     const d = await doc(source);
     const pos = offsetOf(source, "Foo", 0);
     const refs = await findReferences(d, pos, uri, [root]);

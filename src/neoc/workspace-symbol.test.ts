@@ -66,7 +66,7 @@ test("query matches by case-insensitive substring on name", async () => {
     "Product.neoc": `struct Product { id: string }`,
     "Order.neoc": `struct Order { id: string }`,
   });
-  // Cast through `unknown` because the function consumes the internal
+  // Cast through `unknown` because the fn consumes the internal
   // `WorkspaceSymbol` shape — we only populate the fields it reads.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const hit = workspaceSymbolsFor("Prod", ws as any);
@@ -87,10 +87,10 @@ test("empty query returns every harvested symbol", async () => {
   const ws = await buildWorkspace({
     "Product.neoc": `
       struct Product { id: string }
-      function greet(name: string): string { return "hi" }
+      fn greet(name: string) -> string { return "hi" }
     `,
     "Display.neoc": `
-      trait Display { display(self: Self): string; }
+      trait Display { display(self: Self) -> string; }
     `,
   });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -102,9 +102,9 @@ test("symbol kinds map to LSP SymbolKind integers", async () => {
   const ws = await buildWorkspace({
     "all.neoc": `
       struct Product { id: string }
-      trait Display { display(self: Self): string; }
-      function greet(name: string): string { return "hi" }
-      impl Product { do(self: Product): void { } }
+      trait Display { display(self: Self) -> string; }
+      fn greet(name: string) -> string { return "hi" }
+      impl Product { do(self: Product) -> void { } }
     `,
   });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -121,10 +121,10 @@ test("symbol kinds map to LSP SymbolKind integers", async () => {
 test("trait impl entries carry the trait name as containerName", async () => {
   const ws = await buildWorkspace({
     "point.neoc": `
-      trait Display { display(self: Self): string; }
+      trait Display { display(self: Self) -> string; }
       struct Point { x: number, y: number }
       impl Display for Point {
-        display(self: Point): string { return "p" }
+        display(self: Point) -> string { return "p" }
       }
     `,
   });
@@ -142,7 +142,7 @@ test("inherent impls leave containerName undefined", async () => {
   const ws = await buildWorkspace({
     "counter.neoc": `
       struct Counter { n: number }
-      impl Counter { tick(self: Counter): void { } }
+      impl Counter { tick(self: Counter) -> void { } }
     `,
   });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

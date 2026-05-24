@@ -4,7 +4,7 @@
 struct Cat {}
 struct Dog {}
 
-export function sound(animal: Cat | Dog): string {
+pub fn sound(animal: Cat | Dog) -> string {
   return match animal {
     Cat => "meow",
     Dog => "woof",
@@ -12,7 +12,7 @@ export function sound(animal: Cat | Dog): string {
   }
 }
 
-export function describe(x: number): string {
+pub fn describe(x: number) -> string {
   return match x {
     0 => "zero",
     1 => "one",

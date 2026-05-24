@@ -196,9 +196,9 @@ class NeocLexer : LexerBase() {
   companion object {
     private val KEYWORDS = setOf(
       // neoc declaration surface
-      "import", "from", "export", "as", "type",
+      "import", "from", "pub", "as", "type",
       "struct", "impl", "trait", "match", "for",
-      "function", "self", "Self",
+      "fn", "self", "Self",
       // Lua control flow + bindings (used inside method bodies)
       "local", "return", "if", "then", "else", "elseif", "end",
       "do", "while", "repeat", "until", "in", "break",
@@ -207,7 +207,7 @@ class NeocLexer : LexerBase() {
       "nil", "true", "false", "and", "or", "not",
     )
     private val TYPE_KEYWORDS = setOf(
-      "string", "number", "boolean", "table",
+      "string", "number", "bool", "table",
     )
     private val PUNCT_CHARS = setOf('(', ')', '{', '}', '[', ']', ',', ';', '.')
     private val OPERATOR_CHARS = setOf('=', '+', '-', '*', '/', '%', '<', '>', '!', '?', ':', '&', '|', '^', '~')

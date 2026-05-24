@@ -353,7 +353,7 @@
           "members": [
             {
               "type": "STRING",
-              "value": "export"
+              "value": "pub"
             },
             {
               "type": "BLANK"
@@ -374,7 +374,7 @@
         },
         {
           "type": "STRING",
-          "value": "function"
+          "value": "fn"
         },
         {
           "type": "FIELD",
@@ -416,7 +416,7 @@
               "members": [
                 {
                   "type": "STRING",
-                  "value": ":"
+                  "value": "->"
                 },
                 {
                   "type": "FIELD",
@@ -451,7 +451,7 @@
           "members": [
             {
               "type": "STRING",
-              "value": "export"
+              "value": "pub"
             },
             {
               "type": "BLANK"
@@ -504,7 +504,7 @@
           "members": [
             {
               "type": "STRING",
-              "value": "export"
+              "value": "pub"
             },
             {
               "type": "BLANK"
@@ -651,7 +651,7 @@
           "members": [
             {
               "type": "STRING",
-              "value": "export"
+              "value": "pub"
             },
             {
               "type": "BLANK"
@@ -803,7 +803,7 @@
               "members": [
                 {
                   "type": "STRING",
-                  "value": ":"
+                  "value": "->"
                 },
                 {
                   "type": "FIELD",
@@ -838,7 +838,7 @@
           "members": [
             {
               "type": "STRING",
-              "value": "export"
+              "value": "pub"
             },
             {
               "type": "BLANK"
@@ -958,7 +958,7 @@
               "members": [
                 {
                   "type": "STRING",
-                  "value": ":"
+                  "value": "->"
                 },
                 {
                   "type": "FIELD",
@@ -1177,7 +1177,7 @@
           "members": [
             {
               "type": "STRING",
-              "value": "export"
+              "value": "pub"
             },
             {
               "type": "BLANK"
@@ -1338,35 +1338,15 @@
         },
         {
           "type": "STRING",
-          "value": "boolean"
+          "value": "bool"
+        },
+        {
+          "type": "STRING",
+          "value": "table"
         },
         {
           "type": "STRING",
           "value": "void"
-        },
-        {
-          "type": "STRING",
-          "value": "any"
-        },
-        {
-          "type": "STRING",
-          "value": "unknown"
-        },
-        {
-          "type": "STRING",
-          "value": "never"
-        },
-        {
-          "type": "STRING",
-          "value": "object"
-        },
-        {
-          "type": "STRING",
-          "value": "symbol"
-        },
-        {
-          "type": "STRING",
-          "value": "bigint"
         }
       ]
     },

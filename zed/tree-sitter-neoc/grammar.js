@@ -139,18 +139,18 @@ module.exports = grammar({
     // ----- top-level declarations -----------------------------------
 
     function_declaration: $ => seq(
-      optional('export'),
+      optional('pub'),
       optional('async'),
-      'function',
+      'fn',
       field('name', $.identifier),
       optional(field('generics', $.type_parameters)),
       field('parameters', $.arrow_parameters),
-      optional(seq(':', field('return_type', $._type))),
+      optional(seq('->', field('return_type', $._type))),
       field('body', $.statement_block),
     ),
 
     struct_declaration: $ => seq(
-      optional('export'),
+      optional('pub'),
       'struct',
       field('name', $.type_identifier),
       optional(field('generics', $.type_parameters)),
@@ -161,7 +161,7 @@ module.exports = grammar({
     // to a single-field struct named `value`. No attribute slots on the
     // field — use the block form when constraints are needed.
     tuple_struct_declaration: $ => seq(
-      optional('export'),
+      optional('pub'),
       'struct',
       field('name', $.type_identifier),
       '(',
@@ -184,7 +184,7 @@ module.exports = grammar({
     ),
 
     impl_declaration: $ => seq(
-      optional('export'),
+      optional('pub'),
       'impl',
       // Two forms:
       //   impl <Target>                 ← inherent
@@ -207,12 +207,12 @@ module.exports = grammar({
       field('name', $.identifier),
       optional(field('generics', $.type_parameters)),
       field('parameters', $.arrow_parameters),
-      optional(seq(':', field('return_type', $._type))),
+      optional(seq('->', field('return_type', $._type))),
       field('body', $.statement_block),
     ),
 
     trait_declaration: $ => seq(
-      optional('export'),
+      optional('pub'),
       'trait',
       field('name', $.type_identifier),
       optional(field('generics', $.type_parameters)),
@@ -230,7 +230,7 @@ module.exports = grammar({
       field('name', $.identifier),
       optional(field('generics', $.type_parameters)),
       field('parameters', $.arrow_parameters),
-      optional(seq(':', field('return_type', $._type))),
+      optional(seq('->', field('return_type', $._type))),
       // Required signature ends in `;`; default method has a body.
       choice(';', field('body', $.statement_block)),
     ),
@@ -265,7 +265,7 @@ module.exports = grammar({
     // ----- type expressions -----------------------------------------
 
     type_alias: $ => seq(
-      optional('export'),
+      optional('pub'),
       'type',
       field('name', $.type_identifier),
       optional($.type_parameters),
@@ -301,9 +301,9 @@ module.exports = grammar({
     ),
 
     primitive_type: $ => choice(
-      'string', 'number', 'boolean', 'void',
-      'any', 'unknown', 'never', 'object',
-      'symbol', 'bigint',
+      // Lua-aligned primitives, named the way Rust does where the names line up.
+      // `number` covers all numeric values (Lua has no int/float split).
+      'string', 'number', 'bool', 'table', 'void',
     ),
 
     named_type: $ => $.type_identifier,

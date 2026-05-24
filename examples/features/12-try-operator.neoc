@@ -4,13 +4,13 @@
 /// local v = __r.value` — short-circuits on `Err`, unwraps on `Ok`.
 struct ParseError { input: string }
 
-export function parseInt(s: string): Result<number, ParseError> {
+pub fn parseInt(s: string) -> Result<number, ParseError> {
   local n = tonumber(s)
   if n == nil then return Err(ParseError.new({ input = s })) end
   return Ok(n)
 }
 
-export function addTwo(a: string, b: string): Result<number, ParseError> {
+pub fn addTwo(a: string, b: string) -> Result<number, ParseError> {
   let x = parseInt(a)?
   let y = parseInt(b)?
   return Ok(x + y)

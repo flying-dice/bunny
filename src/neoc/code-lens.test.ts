@@ -13,7 +13,7 @@ function titleOf(lens: CodeLens): string {
 
 test("emits a Run test lens above a #[test] function", async () => {
   const source = `#[test]
-function it_works(): void {
+fn it_works() -> void {
 }
 `;
   const d = await doc(source);
@@ -26,10 +26,10 @@ function it_works(): void {
 
 test("emits an N references lens with the right count above a struct", async () => {
   // Three textual occurrences of `Product`: the declaration plus two
-  // type references in the function bodies.
+  // type references in the fn bodies.
   const source = `struct Product { id: string }
 
-function takes(p: Product): Product {
+fn takes(p: Product) -> Product {
   return p
 }
 `;
@@ -43,8 +43,8 @@ function takes(p: Product): Product {
   expect(titleOf(refLens!)).toBe("2 references");
 });
 
-test("a function with no #[test] and no references gets a single 0 references lens", async () => {
-  const source = `function lonely(): void {
+test("a fn with no #[test] and no references gets a single 0 references lens", async () => {
+  const source = `fn lonely() -> void {
 }
 `;
   const d = await doc(source);

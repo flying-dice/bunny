@@ -63,14 +63,14 @@ function namesFor(hits: CaptureHit[], text: string, row?: number): string[] {
     .map((h) => h.name);
 }
 
-test("keywords (struct, impl, trait, match, for, function, export, return) capture @keyword", async () => {
+test("keywords (struct, impl, trait, match, for, fn, pub, return) capture @keyword", async () => {
   const hits = await captures(`
-    export struct Foo { id: string }
-    impl Foo { display(self: Foo): string { return self.id } }
+    pub struct Foo { id: string }
+    impl Foo { display(self: Foo) -> string { return self.id } }
     trait Bar {}
-    export function f(): void { match 0 { _ => 0 } }
+    pub fn f() -> void { match 0 { _ => 0 } }
   `);
-  for (const kw of ["export", "struct", "impl", "trait", "function", "match", "return", "for"]) {
+  for (const kw of ["pub", "struct", "impl", "trait", "fn", "match", "return", "for"]) {
     const names = namesFor(hits, kw);
     if (kw === "for") continue; // `for` only appears as part of `impl Trait for Foo` — see dedicated test below
     expect(names).toContain("keyword");
@@ -87,27 +87,27 @@ test("type identifiers in declaration position capture @type", async () => {
   expect(namesFor(hits, "Display")).toContain("type");
 });
 
-test("primitive types (string, number, boolean) capture @type.builtin", async () => {
+test("primitive types (string, number, bool) capture @type.builtin", async () => {
   const hits = await captures(`
-    struct Foo { a: string, b: number, c: boolean }
+    struct Foo { a: string, b: number, c: bool }
   `);
   expect(namesFor(hits, "string")).toContain("type.builtin");
   expect(namesFor(hits, "number")).toContain("type.builtin");
-  expect(namesFor(hits, "boolean")).toContain("type.builtin");
+  expect(namesFor(hits, "bool")).toContain("type.builtin");
 });
 
 test("Self type captures @keyword (and @type.builtin)", async () => {
   const hits = await captures(`
-    trait T { f(self: Self): Self }
+    trait T { f(self: Self) -> Self; }
   `);
   const selfHits = namesFor(hits, "Self");
   expect(selfHits).toContain("keyword");
 });
 
-test("function names capture @function", async () => {
+test("fn names capture @function", async () => {
   const hits = await captures(`
-    function helper(): void {}
-    export function add(a: number, b: number): number { return a + b }
+    fn helper() -> void {}
+    pub fn add(a: number, b: number) -> number { return a + b }
   `);
   expect(namesFor(hits, "helper")).toContain("function");
   expect(namesFor(hits, "add")).toContain("function");
@@ -116,8 +116,8 @@ test("function names capture @function", async () => {
 test("impl + trait method names capture @function.method", async () => {
   const hits = await captures(`
     struct Foo {}
-    impl Foo { greet(self: Foo): string { return "hi" } }
-    trait Bar { hello(self: Self): string }
+    impl Foo { greet(self: Foo) -> string { return "hi" } }
+    trait Bar { hello(self: Self) -> string; }
   `);
   expect(namesFor(hits, "greet")).toContain("function.method");
   expect(namesFor(hits, "hello")).toContain("function.method");

@@ -162,7 +162,7 @@ function convertStruct(
   return {
     kind: "struct",
     name: node.name.text,
-    exported: node.text.startsWith("export"),
+    exported: node.text.startsWith("pub"),
     generics: node.generics?.text ?? "",
     fields,
     attrs: pendingAttrs,
@@ -187,7 +187,7 @@ function convertTupleStruct(
   return {
     kind: "struct",
     name: node.name.text,
-    exported: node.text.startsWith("export"),
+    exported: node.text.startsWith("pub"),
     generics: "",
     fields: [field],
     attrs: pendingAttrs,
@@ -232,7 +232,7 @@ function convertImpl(
   return {
     kind: "impl",
     name: targetName,
-    exported: node.text.startsWith("export"),
+    exported: node.text.startsWith("pub"),
     traitName,
     traitArgs,
     methods,
@@ -251,7 +251,7 @@ function convertImplMethod(node: N.ImplMethodNode): M.ImplMethod {
   const params = stripParens(node.parameters.text);
   const returnType = node.return_type?.text ?? "";
   const signature = returnType
-    ? `${node.parameters.text}: ${returnType}`
+    ? `${node.parameters.text} -> ${returnType}`
     : node.parameters.text;
   return {
     name: node.name.text,
@@ -277,7 +277,7 @@ function convertTrait(
   return {
     kind: "trait",
     name: node.name.text,
-    exported: node.text.startsWith("export"),
+    exported: node.text.startsWith("pub"),
     generics: node.generics?.text ?? "",
     methods,
     attrs: pendingAttrs,
@@ -289,7 +289,7 @@ function convertTraitMethod(node: N.TraitMethodNode): M.TraitMethod {
   const params = stripParens(node.parameters.text);
   const returnType = node.return_type?.text ?? "";
   const signature = returnType
-    ? `${node.parameters.text}: ${returnType}`
+    ? `${node.parameters.text} -> ${returnType}`
     : node.parameters.text;
   return {
     name: node.name.text,
@@ -310,12 +310,12 @@ function convertFunction(
   const params = stripParens(node.parameters.text);
   const returnType = node.return_type?.text ?? "";
   const signature = returnType
-    ? `${node.parameters.text}: ${returnType}`
+    ? `${node.parameters.text} -> ${returnType}`
     : node.parameters.text;
   return {
     kind: "function",
     name: node.name.text,
-    exported: node.text.startsWith("export"),
+    exported: node.text.startsWith("pub"),
     signature,
     params,
     returnType,

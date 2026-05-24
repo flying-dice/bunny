@@ -15,7 +15,7 @@ test("tuple-struct shorthand emits a single-field Lua factory", async () => {
 
 test("exported tuple-struct drops the `local` prefix", async () => {
   const { lua } = await transpile(`
-    export struct UserId(number)
+    pub struct UserId(number)
   `);
   expect(lua).toContain("UserId = {}");
   expect(lua).not.toContain("local UserId");

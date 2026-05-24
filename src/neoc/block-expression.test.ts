@@ -6,7 +6,7 @@ test("trivial block expression lowers to an IIFE returning the final value", asy
   // table literals (`{ x = v, y = v }`) inside method bodies still parse
   // as object_literal / opaque text rather than block_expression.
   const { lua } = await transpile(`
-    export function f() {
+    pub fn f() {
       let x = { let _ = 0; 42 };
       return x
     }
@@ -16,7 +16,7 @@ test("trivial block expression lowers to an IIFE returning the final value", asy
 
 test("block expression with statements returns its final expression", async () => {
   const { lua } = await transpile(`
-    export function f() {
+    pub fn f() {
       let x = { let a = 1; a + 1 };
       return x
     }
@@ -28,7 +28,7 @@ test("block expression with statements returns its final expression", async () =
 
 test("block expression on the RHS of a let binding", async () => {
   const { lua } = await transpile(`
-    export function f() {
+    pub fn f() {
       let x = {
         let a = 5
         let b = 10
@@ -43,7 +43,7 @@ test("block expression on the RHS of a let binding", async () => {
 
 test("block-expression IIFE introduces its own scope", async () => {
   const { lua } = await transpile(`
-    export function f() {
+    pub fn f() {
       let x = { let inner = 1; inner };
       return x
     }

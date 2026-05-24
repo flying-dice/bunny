@@ -3,7 +3,7 @@
 /// guard evaluates to true; otherwise the next arm is tried.
 struct Number { n: number }
 
-export function classify(x: Number): string {
+pub fn classify(x: Number) -> string {
   return match x {
     Number { n } if n > 0 => "positive",
     Number { n } if n < 0 => "negative",

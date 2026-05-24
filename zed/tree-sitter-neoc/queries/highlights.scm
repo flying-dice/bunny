@@ -10,10 +10,10 @@
 ; ---- keywords -----------------------------------------------------------
 
 [
-  "import" "from" "export" "as" "type"
+  "import" "from" "pub" "as" "type"
   "let" "const" "return" "if" "else"
   "struct" "impl" "trait" "match" "for"
-  "function" "async" "await"
+  "fn" "async" "await"
 ] @keyword
 
 (self_type) @keyword

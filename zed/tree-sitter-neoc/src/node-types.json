@@ -5776,6 +5776,10 @@
     "named": false
   },
   {
+    "type": "->",
+    "named": false
+  },
+  {
     "type": ".",
     "named": false
   },
@@ -5868,10 +5872,6 @@
     "named": false
   },
   {
-    "type": "any",
-    "named": false
-  },
-  {
     "type": "as",
     "named": false
   },
@@ -5884,16 +5884,12 @@
     "named": false
   },
   {
-    "type": "bigint",
-    "named": false
-  },
-  {
     "type": "block_comment",
     "named": true,
     "extra": true
   },
   {
-    "type": "boolean",
+    "type": "bool",
     "named": false
   },
   {
@@ -5921,15 +5917,15 @@
     "named": false
   },
   {
+    "type": "fn",
+    "named": false
+  },
+  {
     "type": "for",
     "named": false
   },
   {
     "type": "from",
-    "named": false
-  },
-  {
-    "type": "function",
     "named": false
   },
   {
@@ -5962,10 +5958,6 @@
     "named": false
   },
   {
-    "type": "never",
-    "named": false
-  },
-  {
     "type": "null_literal",
     "named": true
   },
@@ -5978,7 +5970,7 @@
     "named": true
   },
   {
-    "type": "object",
+    "type": "pub",
     "named": false
   },
   {
@@ -6010,7 +6002,7 @@
     "named": false
   },
   {
-    "type": "symbol",
+    "type": "table",
     "named": false
   },
   {
@@ -6040,10 +6032,6 @@
   {
     "type": "undefined_literal",
     "named": true
-  },
-  {
-    "type": "unknown",
-    "named": false
   },
   {
     "type": "void",

@@ -9,8 +9,6 @@ import type * as M from "../ast/index.ts";
 
 const parts = async (src: string): Promise<M.ModulePart[]> => {
   const { module, diagnostics } = await parseViaTreeSitter(src);
-  // Parser diagnostics are non-fatal but a clean source should produce
-  // none. The tests below all use clean sources.
   expect(diagnostics).toEqual([]);
   return module.parts;
 };
@@ -35,7 +33,7 @@ test("struct: parses name, fields, types, optional flag", async () => {
 });
 
 test("struct: exported flag", async () => {
-  const ps = (await parts(`export struct Foo { id: string }`)).filter(notOpaque);
+  const ps = (await parts(`pub struct Foo { id: string }`)).filter(notOpaque);
   expect((ps[0] as M.StructDecl).exported).toBe(true);
   const ps2 = (await parts(`struct Foo { id: string }`)).filter(notOpaque);
   expect((ps2[0] as M.StructDecl).exported).toBe(false);
@@ -79,7 +77,7 @@ test("impl: inherent block — no traitName, methods listed", async () => {
   const ps = (await parts(`
     struct Counter { n: number }
     impl Counter {
-      bump(self: Counter): void { }
+      bump(self: Counter) -> void { }
     }
   `)).filter(notOpaque);
   const impl = ps.find((p) => p.kind === "impl") as M.ImplDecl;
@@ -90,10 +88,10 @@ test("impl: inherent block — no traitName, methods listed", async () => {
 
 test("impl: trait impl — traitName + target captured", async () => {
   const ps = (await parts(`
-    trait Display { display(self: Self): string }
+    trait Display { display(self: Self) -> string; }
     struct Foo { id: string }
     impl Display for Foo {
-      display(self: Foo): string { return self.id }
+      display(self: Foo) -> string { return self.id }
     }
   `)).filter(notOpaque);
   const impl = ps.find((p) => p.kind === "impl") as M.ImplDecl;
@@ -104,8 +102,8 @@ test("impl: trait impl — traitName + target captured", async () => {
 test("trait: declaration carries required + default-bodied methods", async () => {
   const ps = (await parts(`
     trait Greet {
-      hello(self: Self): string
-      hi(self: Self): string {
+      hello(self: Self) -> string;
+      hi(self: Self) -> string {
         return "hi from " .. Self.hello(self)
       }
     }
@@ -120,7 +118,7 @@ test("trait: declaration carries required + default-bodied methods", async () =>
 
 test("function: standalone declarations with params and return type", async () => {
   const ps = (await parts(`
-    export function add(a: number, b: number): number {
+    pub fn add(a: number, b: number) -> number {
       return a + b
     }
   `)).filter(notOpaque);
@@ -136,7 +134,7 @@ test("function: standalone declarations with params and return type", async () =
 test("function: attributes attach to the declaration", async () => {
   const ps = (await parts(`
     #[test]
-    export function works(): void { }
+    pub fn works() -> void { }
   `)).filter(notOpaque);
   const f = ps[0] as M.FunctionDecl;
   expect(f.attrs.map((a) => a.name)).toEqual(["test"]);
@@ -146,7 +144,7 @@ test("source-order preservation: parts come back in lexical order", async () => 
   const ps = (await parts(`
     struct A { id: string }
     struct B { id: string }
-    function f(): void { }
+    fn f() -> void { }
     struct C { id: string }
   `)).filter(notOpaque);
   expect(ps.map((p) => (p as { name: string }).name)).toEqual(["A", "B", "f", "C"]);
@@ -156,7 +154,6 @@ test("spans cover the whole declaration text", async () => {
   const src = `struct Foo { id: string }`;
   const ps = (await parts(src)).filter(notOpaque);
   const p = ps[0]!;
-  // start at `struct`, end at the closing brace.
   expect(src.slice(p.span.start, p.span.end)).toContain("struct Foo");
   expect(src.slice(p.span.start, p.span.end)).toContain("id: string");
 });

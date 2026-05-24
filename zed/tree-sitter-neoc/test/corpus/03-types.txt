@@ -91,10 +91,10 @@ type Pair = [string, number];
       (primitive_type))))
 
 ==================
-function type
+fn type
 ==================
 
-type Handler = (req: string, ctx: number) => boolean;
+type Handler = (req: string, ctx: number) => bool;
 
 ---
 
@@ -166,7 +166,7 @@ type Returns = Self;
 exported type alias
 ==================
 
-export type Status = "ok" | "err";
+pub type Status = "ok" | "err";
 
 ---
 

@@ -3,7 +3,7 @@ import { transpile } from "./compiler.ts";
 
 test("bare `_ if cond =>` lowers to a conditional return", async () => {
   const { lua } = await transpile(`
-    export function classify(n: number): string {
+    pub fn classify(n: number): string {
       return match n {
         _ if n > 0 => "positive",
         _ if n < 0 => "negative",
@@ -22,7 +22,7 @@ test("bare `_ if cond =>` lowers to a conditional return", async () => {
 test("struct-pattern guard runs after the binds are in scope", async () => {
   const { lua } = await transpile(`
     struct Number { n: number }
-    export function describe(value: Number): string {
+    pub fn describe(value: Number): string {
       return match value {
         Number { n } if n > 0 => "positive",
         Number { n } if n < 0 => "negative",
@@ -45,7 +45,7 @@ test("struct-pattern guard runs after the binds are in scope", async () => {
 
 test("a guarded catch-all does not suppress the error fallback", async () => {
   const { lua } = await transpile(`
-    export function f(x: number): string {
+    pub fn f(x: number): string {
       return match x {
         1 => "one",
         _ if x > 10 => "big",

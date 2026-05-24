@@ -197,7 +197,7 @@ route attribute on function
 ==================
 
 #[get("/products/:id")]
-export function getProduct(id: string): Product {
+pub fn getProduct(id: string) -> Product {
   return Product.new({ id });
 }
 

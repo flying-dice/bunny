@@ -17,7 +17,7 @@ test("struct emits a Lua factory + metatable", async () => {
 
 test("exported struct drops the `local` prefix", async () => {
   const { lua } = await transpile(`
-    export struct Product { id: string }
+    pub struct Product { id: string }
   `);
   expect(lua).toContain("Product = {}");
   expect(lua).not.toContain("local Product");
@@ -93,7 +93,7 @@ test("trait default-bodied methods land on the implementing struct", async () =>
 test("`import { Foo } from \"./mod\"` translates to require + locals", async () => {
   const { lua } = await transpile(`
     import { Foo, Bar as B } from "./mod.neoc";
-    export function f(): void {}
+    pub fn f(): void {}
   `);
   expect(lua).toMatch(/local __mod_\w+ = require\("\.\/mod"\)/);
   expect(lua).toMatch(/local Foo = __mod_\w+\.Foo/);
@@ -103,7 +103,7 @@ test("`import { Foo } from \"./mod\"` translates to require + locals", async () 
 test("`import type { Foo } from \"./mod\"` is dropped entirely", async () => {
   const { lua } = await transpile(`
     import type { Foo } from "./mod.neoc";
-    export function f(): void {}
+    pub fn f(): void {}
   `);
   expect(lua).not.toContain("require");
   expect(lua).not.toContain("Foo");
@@ -112,7 +112,7 @@ test("`import type { Foo } from \"./mod\"` is dropped entirely", async () => {
 test("`import * as M from \"./mod\"` translates to a single require", async () => {
   const { lua } = await transpile(`
     import * as M from "./mod.neoc";
-    export function f(): void {}
+    pub fn f(): void {}
   `);
   expect(lua).toContain(`local M = require("./mod")`);
 });
@@ -121,7 +121,7 @@ test("match on a struct union lowers to a Lua IIFE", async () => {
   const { lua } = await transpile(`
     struct Cat {}
     struct Dog {}
-    export function sound(animal: Cat | Dog): string {
+    pub fn sound(animal: Cat | Dog): string {
       return match animal {
         Cat => "meow",
         Dog => "woof",

@@ -24,7 +24,7 @@ test("renameSymbol rewrites every occurrence of a struct in a single document", 
       }
     }
 
-    function makeProduct(p: Product): Product {
+    function makeProduct(p: Product) -> Product {
       return p
     }
   `;
@@ -76,7 +76,7 @@ test("renameSymbol skips occurrences inside string literals and comments", async
     function describe(): string {
       return "Widget is a name in a string"
     }
-    function use(w: Widget): Widget {
+    function use(w: Widget) -> Widget {
       return w
     }
   `;
@@ -99,7 +99,7 @@ test("renameSymbol spans every .neoc file under the workspace root", async () =>
     writeFileSync(entityPath, "struct Product { id: string }\n", "utf-8");
     writeFileSync(
       ctrlPath,
-      "function buy(p: Product): Product { return p }\n",
+      "fn buy(p: Product) -> Product { return p }\n",
       "utf-8",
     );
     const openText = "struct Product { id: string }\n";

@@ -3,7 +3,7 @@
 /// prelude when any of `Result`, `Ok`, or `Err` is referenced.
 struct ParseError { input: string }
 
-export function parsePositive(s: string): Result<number, ParseError> {
+pub fn parsePositive(s: string) -> Result<number, ParseError> {
   local n = tonumber(s)
   if n == nil or n <= 0 then return Err(ParseError.new({ input = s })) end
   return Ok(n)

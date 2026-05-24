@@ -6,14 +6,14 @@
 /// neoc's type surface doesn't yet name those, so they're typed as
 /// `string` here purely to satisfy the parser. The actual returned
 /// values are tables, as the tests confirm.
-export function exclusive(): string {
+pub fn exclusive() -> string {
   return 0..5
 }
 
-export function inclusive(): string {
+pub fn inclusive() -> string {
   return 0..=5
 }
 
-export function withBounds(lo: number, hi: number): string {
+pub fn withBounds(lo: number, hi: number) -> string {
   return lo..hi
 }

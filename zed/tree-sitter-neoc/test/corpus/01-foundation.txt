@@ -112,7 +112,7 @@ string with escape
     (string_fragment_double)))
 
 ==================
-boolean literals
+bool literals
 ==================
 
 true;

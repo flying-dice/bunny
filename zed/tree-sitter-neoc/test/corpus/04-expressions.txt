@@ -53,7 +53,7 @@ unary not
     (identifier)))
 
 ==================
-function call
+fn call
 ==================
 
 doStuff(a, b);

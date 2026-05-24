@@ -3,7 +3,7 @@ import { transpile } from "./compiler.ts";
 
 test("`0..3` lowers to an exclusive sequence builder", async () => {
   const { lua } = await transpile(`
-    export function f() {
+    pub fn f() {
       let xs = 0..3;
       return xs
     }
@@ -16,7 +16,7 @@ test("`0..3` lowers to an exclusive sequence builder", async () => {
 
 test("`0..=3` lowers to an inclusive sequence builder", async () => {
   const { lua } = await transpile(`
-    export function f() {
+    pub fn f() {
       let xs = 0..=3;
       return xs
     }
@@ -27,7 +27,7 @@ test("`0..=3` lowers to an inclusive sequence builder", async () => {
 
 test("variable bounds carry through the rewrite", async () => {
   const { lua } = await transpile(`
-    export function f(a: number, b: number) {
+    pub fn f(a: number, b: number) {
       let xs = a..b;
       return xs
     }

@@ -1,4 +1,4 @@
---- `#[test]` on an exported function registers it with the module's
+--- `#[test]` on an exported fn registers it with the module's
 --- `__neoc_tests` table. `neoc test` discovers every registration
 --- across all `.neoc` files, runs each through `luau`, and reports
 --- pass/fail counts.

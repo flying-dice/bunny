@@ -1,8 +1,8 @@
 ==================
-function declaration
+fn declaration
 ==================
 
-function add(a: number, b: number): number {
+fn add(a: number, b: number) -> number {
   return a + b;
 }
 
@@ -29,7 +29,7 @@ function add(a: number, b: number): number {
 exported async function
 ==================
 
-export async function load(): Promise<string> {
+pub async fn load() -> Promise<string> {
   return "ok";
 }
 
@@ -73,7 +73,7 @@ struct with multiple fields
 struct Product {
   id: string,
   priceCents: number,
-  inStock: boolean,
+  inStock: bool,
 }
 
 ---
@@ -131,7 +131,7 @@ struct ProductId(string)
 exported tuple-struct newtype
 ==================
 
-export struct UserId(number)
+pub struct UserId(number)
 
 ---
 
@@ -145,7 +145,7 @@ inherent impl
 ==================
 
 impl Product {
-  new(data: Product): Product {
+  new(data: Product) -> Product {
     return data;
   }
 }
@@ -174,7 +174,7 @@ trait impl
 ==================
 
 impl Display for Product {
-  fmt(self: Product): string {
+  fmt(self: Product) -> string {
     return self.name;
   }
 }
@@ -205,8 +205,8 @@ trait declaration with required + default
 ==================
 
 trait Display {
-  fmt(self: Self): string;
-  show(self: Self): string {
+  fmt(self: Self) -> string;
+  show(self: Self) -> string {
     return Self.fmt(self);
   }
 }

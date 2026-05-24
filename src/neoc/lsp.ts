@@ -799,9 +799,9 @@ function missingMessage(traitName: string, missing: TraitMethodSig[]): string {
 // Mix of declaration-level keywords (used in `.neoc`'s typed surface)
 // and body-level Lua keywords (used inside method bodies and gaps).
 const KEYWORDS = [
-  // neoc declarations
-  "struct", "impl", "trait", "match", "for", "Self", "function",
-  "export", "import", "from", "as", "type",
+  // neoc declarations (Rust-flavoured surface)
+  "struct", "impl", "trait", "match", "for", "Self", "fn",
+  "pub", "import", "from", "as", "type", "let", "mut",
   // Lua control flow + bindings (used inside method bodies)
   "local", "return", "if", "then", "else", "elseif", "end",
   "do", "while", "repeat", "until", "in", "break",
@@ -2506,7 +2506,7 @@ function structFactorySignature(
   structName: string,
   docText: string | undefined,
 ): SignatureInformation {
-  const label = `${structName}.new(data: ${structName}): ${structName}`;
+  const label = `${structName}.new(data: ${structName}) -> ${structName}`;
   return buildSignatureInfo(label, `data: ${structName}`, docText);
 }
 

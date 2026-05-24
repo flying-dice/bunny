@@ -3,7 +3,7 @@ import { transpile } from "./compiler.ts";
 
 test("`expr?` in a `let` lowers to a guarded local binding", async () => {
   const { lua } = await transpile(`
-    export function f(): Result<number, string> {
+    pub fn f() -> Result<number, string> {
       let v = parse()?;
       return Ok(v + 1)
     }
@@ -15,7 +15,7 @@ test("`expr?` in a `let` lowers to a guarded local binding", async () => {
 
 test("`expr?;` at statement position lowers without binding the value", async () => {
   const { lua } = await transpile(`
-    export function f(): Result<number, string> {
+    pub fn f() -> Result<number, string> {
       doWork()?;
       return Ok(0)
     }
@@ -29,7 +29,7 @@ test("`expr?;` at statement position lowers without binding the value", async ()
 
 test("multiple `?` in one body get unique locals", async () => {
   const { lua } = await transpile(`
-    export function f(): Result<number, string> {
+    pub fn f() -> Result<number, string> {
       let a = parseA()?;
       let b = parseB()?;
       return Ok(a + b)

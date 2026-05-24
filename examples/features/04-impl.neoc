@@ -3,10 +3,10 @@
 struct Counter { n: number }
 
 impl Counter {
-  increment(self: Counter): void {
+  increment(self: Counter) -> void {
     self.n = self.n + 1
   }
-  value(self: Counter): number {
+  value(self: Counter) -> number {
     return self.n
   }
 }

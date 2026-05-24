@@ -35,8 +35,8 @@ test("structs surface as Struct symbols with one Field child per declared field"
 test("trait declarations surface as Interface with Method children", async () => {
   const d = await doc(`
     trait Display {
-      display(self: Self): string;
-      label(self: Self): string {
+      display(self: Self) -> string;
+      label(self: Self) -> string {
         return "x"
       }
     }
@@ -56,7 +56,7 @@ test("inherent impl surfaces as Class with `impl` detail", async () => {
   const d = await doc(`
     struct Counter { n: number }
     impl Counter {
-      increment(self: Counter): void {
+      increment(self: Counter) -> void {
         self.n = self.n + 1
       }
     }
@@ -72,11 +72,11 @@ test("inherent impl surfaces as Class with `impl` detail", async () => {
 test("trait impl surfaces with `impl <Trait>` detail", async () => {
   const d = await doc(`
     trait Display {
-      display(self: Self): string;
+      display(self: Self) -> string;
     }
     struct Point { x: number, y: number }
     impl Display for Point {
-      display(self: Point): string {
+      display(self: Point) -> string {
         return "p"
       }
     }
@@ -92,7 +92,7 @@ test("trait impl surfaces with `impl <Trait>` detail", async () => {
 
 test("top-level functions surface as Function symbols with their signature as detail", async () => {
   const d = await doc(`
-    function greet(name: string): string {
+    fn greet(name: string) -> string {
       return "hi"
     }
   `);
@@ -118,9 +118,9 @@ test("selectionRange targets the declaration's name, not the whole span", async 
 test("multiple top-level parts preserve source order", async () => {
   const d = await doc(`
     struct A { x: number }
-    function go(): void { return }
-    trait T { ping(self: Self): void; }
-    impl A { kick(self: A): void { } }
+    fn go() -> void { return }
+    trait T { ping(self: Self) -> void; }
+    impl A { kick(self: A) -> void { } }
   `);
   const names = documentSymbolsFor(d).map((s) => s.name);
   expect(names).toEqual(["A", "go", "T", "A"]);

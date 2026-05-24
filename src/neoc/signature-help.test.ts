@@ -21,11 +21,11 @@ function positionAt(source: string, marker: string): { line: number; character: 
 const emptyWorkspace = new Map();
 
 test("cursor inside foo(|) returns the signature with activeParameter 0", async () => {
-  const source = `function add(a: number, b: number): number {
+  const source = `fn add(a: number, b: number) -> number {
   return a + b
 }
 
-function caller(): number {
+fn caller() -> number {
   return add()
 }
 `;
@@ -36,7 +36,7 @@ function caller(): number {
   const help = signatureHelpAt(d, pos, emptyWorkspace);
   expect(help).not.toBeNull();
   expect(help!.signatures).toHaveLength(1);
-  expect(help!.signatures[0]!.label).toBe("add(a: number, b: number): number");
+  expect(help!.signatures[0]!.label).toBe("add(a: number, b: number) -> number");
   expect(help!.signatures[0]!.parameters).toEqual([
     { label: "a: number" },
     { label: "b: number" },
@@ -45,11 +45,11 @@ function caller(): number {
 });
 
 test("cursor after a comma foo(1, |) returns activeParameter 1", async () => {
-  const source = `function add(a: number, b: number): number {
+  const source = `fn add(a: number, b: number) -> number {
   return a + b
 }
 
-function caller(): number {
+fn caller() -> number {
   return add(1, 2)
 }
 `;
@@ -59,7 +59,7 @@ function caller(): number {
   const help = signatureHelpAt(d, pos, emptyWorkspace);
   expect(help).not.toBeNull();
   expect(help!.activeParameter).toBe(1);
-  expect(help!.signatures[0]!.label).toBe("add(a: number, b: number): number");
+  expect(help!.signatures[0]!.label).toBe("add(a: number, b: number) -> number");
 });
 
 test("cursor inside Product.new(|) returns the struct's .new signature", async () => {
@@ -68,7 +68,7 @@ test("cursor inside Product.new(|) returns the struct's .new signature", async (
   name: string,
 }
 
-function build(): Product {
+fn build() -> Product {
   return Product.new({ id: "1", name: "x" })
 }
 `;
@@ -77,28 +77,28 @@ function build(): Product {
   pos.character += "Product.new(".length;
   const help = signatureHelpAt(d, pos, emptyWorkspace);
   expect(help).not.toBeNull();
-  expect(help!.signatures[0]!.label).toBe("Product.new(data: Product): Product");
+  expect(help!.signatures[0]!.label).toBe("Product.new(data: Product) -> Product");
   expect(help!.signatures[0]!.parameters).toEqual([{ label: "data: Product" }]);
   expect(help!.activeParameter).toBe(0);
 });
 
 test("cursor outside any call returns null", async () => {
-  const source = `function add(a: number, b: number): number {
+  const source = `fn add(a: number, b: number) -> number {
   return a + b
 }
 `;
   const d = await doc(source);
   // Position cursor on the `function` keyword.
-  const pos = positionAt(source, "function");
+  const pos = positionAt(source, "fn ");
   const help = signatureHelpAt(d, pos, emptyWorkspace);
   expect(help).toBeNull();
 });
 
 test("nested calls report the innermost callee", async () => {
-  const source = `function inner(x: number): number { return x }
-function outer(a: number, b: number): number { return a + b }
+  const source = `fn inner(x: number) -> number { return x }
+fn outer(a: number, b: number) -> number { return a + b }
 
-function caller(): number {
+fn caller() -> number {
   return outer(1, inner())
 }
 `;
@@ -107,14 +107,14 @@ function caller(): number {
   pos.character += "inner(".length;
   const help = signatureHelpAt(d, pos, emptyWorkspace);
   expect(help).not.toBeNull();
-  expect(help!.signatures[0]!.label).toBe("inner(x: number): number");
+  expect(help!.signatures[0]!.label).toBe("inner(x: number) -> number");
   expect(help!.activeParameter).toBe(0);
 });
 
 test("commas inside nested brackets don't bump activeParameter", async () => {
-  const source = `function take(a: table, b: number): number { return b }
+  const source = `fn take(a: table, b: number) -> number { return b }
 
-function caller(): number {
+fn caller() -> number {
   return take({ x: 1, y: 2 }, 7)
 }
 `;
