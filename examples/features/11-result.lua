@@ -20,7 +20,9 @@ end
 
 function parsePositive(s)
   local n = tonumber(s)
-    if n == nil or n <= 0 then return Err(ParseError.new({ input = s })) end
-    return Ok(n)
+  if n == nil or n <= 0 then
+    return Err(ParseError.new({ input = s }))
+  end
+  return Ok(n)
 end
 

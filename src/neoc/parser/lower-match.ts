@@ -47,7 +47,7 @@ function collectMatches(
   }
 }
 
-function renderMatchAsIife(node: N.MatchExpressionNode): string {
+export function renderMatchAsIife(node: N.MatchExpressionNode): string {
   const scrutinee = node.scrutinee.text;
   const arms = (node.children ?? []).filter((c) => c.kind === "match_arm") as N.MatchArmNode[];
 

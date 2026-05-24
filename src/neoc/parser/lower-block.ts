@@ -66,6 +66,10 @@ function collectOuterBlocks(
 // Statement and final-expression text come straight from the AST
 // fields; nested blocks inside either part are lowered by recursing
 // through `lowerBlock` anchored at the relevant sub-node.
+export function renderBlockAsIife(node: N.BlockExpressionNode): string {
+  return renderBlock(node);
+}
+
 function renderBlock(node: N.BlockExpressionNode): string {
   const finalStartLocal = node.final.startIndex - node.startIndex;
   const finalEndLocal = node.final.endIndex - node.startIndex;

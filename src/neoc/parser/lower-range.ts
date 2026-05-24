@@ -72,7 +72,7 @@ function collectRanges(
   }
 }
 
-function renderRangeAsIife(node: N.RangeExpressionNode): string {
+export function renderRangeAsIife(node: N.RangeExpressionNode): string {
   const startText = node.start.text.trim();
   const endText = node.end.text.trim();
   // The `op` field tags `..` vs `..=` in the grammar, but tree-sitter

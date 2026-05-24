@@ -21,18 +21,20 @@ end
 
 function parseInt(s)
   local n = tonumber(s)
-    if n == nil then return Err(ParseError.new({ input = s })) end
-    return Ok(n)
+  if n == nil then
+    return Err(ParseError.new({ input = s }))
+  end
+  return Ok(n)
 end
 
 
 function addTwo(a, b)
   local __r = parseInt(a)
   if not __r.ok then return __r end
-  local x = __r.value;
-    local __r_1 = parseInt(b)
+  local x = __r.value
+  local __r_1 = parseInt(b)
   if not __r_1.ok then return __r_1 end
-  local y = __r_1.value;
-    return Ok(x + y)
+  local y = __r_1.value
+  return Ok(x + y)
 end
 

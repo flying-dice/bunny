@@ -10,27 +10,21 @@
  */
 import * as M from "../ast/index.ts";
 import type * as N from "../ast/nodes.generated.ts";
-import { lowerBlock } from "./lower-block.ts";
-import { lowerBody } from "./lower-match.ts";
-import { lowerRange } from "./lower-range.ts";
-import { lowerTry } from "./lower-try.ts";
+import { emitLuaBody, resetEmitterState } from "./lower-body.ts";
 import { parseToAst } from "./tree-sitter.ts";
 
-// Body rewrites compose by running each pass over the body text
-// independently and feeding the next pass the post-rewrite source.
-// Each pass anchors its splices to original AST positions, so a body
-// mixing several constructs needs care — no pass walks another's
-// output. Match runs first; range and try slot their rewrites in
-// around the IIFE that match emitted.
+// `lowerAll` walks the body AST and emits Lua statement-by-statement.
+// The emitter lives in `./lower-body.ts`; the four splice-based
+// lowerings it replaced (block / match / range / try) still expose
+// their render helpers so the emitter can delegate the expression-
+// position cases unchanged.
 function lowerAll(body: N.StatementBlockNode): string {
-  // Block runs first against the verbatim source so its statements
-  // and final-expression slices line up with AST positions. Inner
-  // match / range / try inside a block are not re-lowered for this
-  // pass — see specs/block-expression.md.
-  const afterBlock = lowerBlock(body, body.text);
-  const afterMatch = lowerBody(body, afterBlock);
-  const afterRange = lowerRange(body, afterMatch);
-  return lowerTry(body, afterRange);
+  resetEmitterState();
+  // Body text is the literal `{ ... }`. The emitter walks children
+  // and joins their emissions, so the surrounding braces are dropped
+  // here — the codegen wraps the result in `function ... end`.
+  const out = emitLuaBody(body);
+  return `{\n${out}\n}`;
 }
 
 export async function parseViaTreeSitter(source: string): Promise<M.ParseResult> {

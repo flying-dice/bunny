@@ -9,8 +9,10 @@ ext fn tonumber(s: string) -> number;
 struct ParseError { input: string }
 
 pub fn parseInt(s: string) -> Result<number, ParseError> {
-  local n = tonumber(s)
-  if n == nil then return Err(ParseError.new({ input = s })) end
+  let n = tonumber(s)
+  if (n == nil) {
+    return Err(ParseError.new({ input: s }))
+  }
   return Ok(n)
 }
 
