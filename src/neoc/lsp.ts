@@ -44,8 +44,18 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parse } from "./parser/index.ts";
 import * as M from "./ast/index.ts";
+import type * as N from "./ast/nodes.generated.ts";
 import { transpile } from "./compiler.ts";
 import { formatSource } from "./fmt.ts";
+import { buildModuleScope, type TypeEnv } from "./types/env.ts";
+import {
+  buildStructMap,
+  buildImplMap,
+  type InferCtx,
+  type TypeDiagnostic,
+} from "./types/infer.ts";
+import { inferBody } from "./types/walk.ts";
+import { parseType, UNKNOWN, type Type } from "./types/type.ts";
 
 interface JsonRpcMessage {
   jsonrpc: "2.0";
@@ -736,9 +746,133 @@ async function publishDiagnostics(
   const docState = docs.get(uri);
   if (docState) {
     diagnostics.push(...missingTraitMethodDiagnostics(docState, workspace));
+    diagnostics.push(...inferenceDiagnostics(docState, workspace));
   }
   const params: PublishDiagnosticsParams = { uri, diagnostics };
   notify("textDocument/publishDiagnostics", params);
+}
+
+/**
+ * Run `inferBody` over every function-like body in the document and
+ * convert each `TypeDiagnostic` into an LSP warning. Workspace-visible
+ * declarations from other files are seeded into the module scope so a
+ * cross-file reference to a symbol declared elsewhere doesn't read as
+ * unbound.
+ *
+ * Severity is `Warning` (2) because V1 inference is lossy — we surface
+ * the soft errors the walker collected without claiming they are hard
+ * type errors.
+ */
+export function inferenceDiagnostics(
+  doc: DocState,
+  workspace: ReadonlyMap<string, WorkspaceSymbol>,
+): LspDiagnostic[] {
+  if (!doc.module) return [];
+  const out: LspDiagnostic[] = [];
+  for (const part of doc.module.parts) {
+    if (part.kind === "function") {
+      if (part.bodyAst) {
+        collectInferenceDiagnostics(doc, part.bodyAst, part.params, undefined, workspace, out);
+      }
+      continue;
+    }
+    if (part.kind === "impl") {
+      for (const method of part.methods) {
+        if (!method.bodyAst) continue;
+        collectInferenceDiagnostics(doc, method.bodyAst, method.params, part.name, workspace, out);
+      }
+      continue;
+    }
+    if (part.kind === "trait") {
+      for (const method of part.methods) {
+        if (!method.bodyAst) continue;
+        collectInferenceDiagnostics(doc, method.bodyAst, method.params, undefined, workspace, out);
+      }
+      continue;
+    }
+  }
+  return out;
+}
+
+function collectInferenceDiagnostics(
+  doc: DocState,
+  body: N.StatementBlockNode,
+  paramsText: string,
+  selfStructName: string | undefined,
+  workspace: ReadonlyMap<string, WorkspaceSymbol>,
+  out: LspDiagnostic[],
+): void {
+  if (!doc.module) return;
+  const ctx: InferCtx = {
+    env: buildModuleScope(doc.module),
+    structs: buildStructMap(doc.module),
+    impls: buildImplMap(doc.module),
+  };
+  seedWorkspaceNames(ctx.env, doc.module, workspace);
+  // Parameters live in a scope wrapped around the body. The walker
+  // opens its own nested scope on entry so locals don't leak out.
+  ctx.env.push();
+  try {
+    if (selfStructName) {
+      const selfType: Type = { kind: "struct", name: selfStructName };
+      ctx.env.define("self", { type: selfType, kind: "param" });
+      ctx.env.define("Self", { type: selfType, kind: "param" });
+    }
+    for (const p of parseParamList(paramsText)) {
+      ctx.env.define(p.name, { type: parseType(p.type), kind: "param" });
+    }
+    const inferred = inferBody(body, ctx);
+    for (const diag of inferred.diagnostics) {
+      out.push(toInferenceLspDiagnostic(doc.text, diag));
+    }
+  } finally {
+    ctx.env.pop();
+  }
+}
+
+// Bind every workspace-visible declaration that isn't already in the
+// module scope. Types stay `Unknown` — we only need the binding to
+// exist so cross-file references don't surface as `unbound:`.
+function seedWorkspaceNames(
+  env: TypeEnv,
+  module: M.Module,
+  workspace: ReadonlyMap<string, WorkspaceSymbol>,
+): void {
+  const local = new Set<string>();
+  for (const part of module.parts) {
+    if (part.kind === "opaque") continue;
+    local.add(part.name);
+  }
+  for (const sym of workspace.values()) {
+    if (local.has(sym.name)) continue;
+    switch (sym.kind) {
+      case "struct":
+        env.define(sym.name, { type: { kind: "struct", name: sym.name }, kind: "struct" });
+        break;
+      case "trait":
+        env.define(sym.name, { type: UNKNOWN, kind: "trait" });
+        break;
+      case "function":
+        env.define(sym.name, { type: UNKNOWN, kind: "fn" });
+        break;
+      case "extern_function":
+        env.define(sym.name, { type: UNKNOWN, kind: "ext_fn" });
+        break;
+      case "impl":
+        // Impls don't introduce a name into the value namespace.
+        break;
+    }
+  }
+}
+
+function toInferenceLspDiagnostic(text: string, diag: TypeDiagnostic): LspDiagnostic {
+  return {
+    range: offsetsToRange(text, diag.range.start, diag.range.end),
+    severity: 2 /* Warning */,
+    source: "neoc",
+    message: diag.message,
+    code: "neoc/inference",
+  };
 }
 
 // One warning per `impl Trait for X { … }` block that's missing any
