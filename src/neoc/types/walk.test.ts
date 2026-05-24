@@ -302,6 +302,42 @@ test("wildcard arm satisfies exhaustiveness", async () => {
 });
 
 // ---------------------------------------------------------------------------
+// Annotated-let type-mismatch checking
+// ---------------------------------------------------------------------------
+
+test("let with mismatched annotation surfaces a diagnostic", async () => {
+  const { ctx, bodyOf } = await buildCtx(`
+    pub fn run() -> string {
+      let x: number = "hello"
+      return "ok"
+    }
+  `);
+  ctx.expectedReturn = STRING;
+  const result = inferBody(bodyOf("run"), ctx);
+  const mismatch = result.diagnostics.find((d) =>
+    d.message.startsWith("type mismatch"),
+  );
+  expect(mismatch).toBeDefined();
+  expect(mismatch!.message).toContain("x declared as number");
+  expect(mismatch!.message).toContain("got string");
+});
+
+test("let with matching annotation stays silent", async () => {
+  const { ctx, bodyOf } = await buildCtx(`
+    pub fn run() -> string {
+      let x: number = 42
+      return "ok"
+    }
+  `);
+  ctx.expectedReturn = STRING;
+  const result = inferBody(bodyOf("run"), ctx);
+  const mismatch = result.diagnostics.find((d) =>
+    d.message.startsWith("type mismatch"),
+  );
+  expect(mismatch).toBeUndefined();
+});
+
+// ---------------------------------------------------------------------------
 // Return-type checking
 // ---------------------------------------------------------------------------
 

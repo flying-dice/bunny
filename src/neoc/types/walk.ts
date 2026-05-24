@@ -132,7 +132,17 @@ function walkVariableDeclaration(
   // matches the value expression. An annotated `let x: T = expr`
   // wins over inference — the annotation is the user's intent.
   const valueType = node.value ? walkExpr(node.value as N.AstNode, ctx, out) : UNKNOWN;
-  const boundType = node.type ? parseType(node.type.text) : valueType;
+  let boundType: Type = valueType;
+  if (node.type) {
+    const declared = parseType(node.type.text);
+    boundType = declared;
+    if (node.value && !equals(declared, valueType)) {
+      out.diagnostics.push({
+        message: `type mismatch: ${node.name.text} declared as ${display(declared)}, got ${display(valueType)}`,
+        range: { start: node.startIndex, end: node.endIndex },
+      });
+    }
+  }
   out.types.set(node.name.startIndex, boundType);
   ctx.env.define(node.name.text, { type: boundType, kind: "local" });
 }
