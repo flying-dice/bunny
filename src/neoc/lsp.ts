@@ -50,9 +50,9 @@ import type * as N from "./ast/nodes.generated.ts";
 import { transpile } from "./compiler.ts";
 import { formatSource } from "./fmt.ts";
 import { buildModuleScope } from "./types/env.ts";
-import { buildStructMap, buildImplMap, type InferCtx } from "./types/infer.ts";
+import { buildStructMap, buildImplMap, inferExpression, type InferCtx } from "./types/infer.ts";
 import { inferBody } from "./types/walk.ts";
-import { display, parseType } from "./types/type.ts";
+import { display, parseType, type Type } from "./types/type.ts";
 
 interface JsonRpcMessage {
   jsonrpc: "2.0";
@@ -1263,16 +1263,23 @@ const MACRO_DOCS: Record<string, string> = {
   Display: "Derive: emits `function Foo.display(self)` returning a human-readable `Foo { field=value, … }` string.",
 };
 
-function hoverAt(
+export function hoverAt(
   doc: DocState,
   pos: Position,
   workspace: ReadonlyMap<string, WorkspaceSymbol>,
 ): Hover | null {
   const word = wordAt(doc.text, pos);
   if (!word) return null;
+
+  const inferredLine = inferredTypeLineAt(doc, pos);
+
   const md = MACRO_DOCS[word.text];
   if (md) {
-    return { contents: { kind: "markdown", value: `**${word.text}** — ${md}` }, range: word.range };
+    const base = `**${word.text}** — ${md}`;
+    return {
+      contents: { kind: "markdown", value: appendTypeLine(base, inferredLine) },
+      range: word.range,
+    };
   }
   // Local declarations win over workspace entries.
   if (doc.module) {
@@ -1281,7 +1288,10 @@ function hoverAt(
       if (p.name === word.text) {
         const localDoc = extractDocBefore(doc.text, p.span.start);
         return {
-          contents: { kind: "markdown", value: hoverMarkdown(describePart(p), localDoc) },
+          contents: {
+            kind: "markdown",
+            value: appendTypeLine(hoverMarkdown(describePart(p), localDoc), inferredLine),
+          },
           range: word.range,
         };
       }
@@ -1290,13 +1300,196 @@ function hoverAt(
   for (const sym of workspace.values()) {
     if (sym.name === word.text) {
       return {
-        contents: { kind: "markdown", value: hoverMarkdown(sym.detail, sym.doc) },
+        contents: {
+          kind: "markdown",
+          value: appendTypeLine(hoverMarkdown(sym.detail, sym.doc), inferredLine),
+        },
         range: word.range,
       };
     }
   }
+  // No declaration match — but if the cursor sits on an expression
+  // inside a function body whose type the inference engine resolved,
+  // surface just the type line so the editor still shows something.
+  if (inferredLine) {
+    return {
+      contents: { kind: "markdown", value: inferredLine },
+      range: word.range,
+    };
+  }
   return null;
 }
+
+function appendTypeLine(base: string, typeLine: string | undefined): string {
+  if (!typeLine) return base;
+  return `${base}\n\n${typeLine}`;
+}
+
+/**
+ * Resolve the inferred type of the expression at `pos` and render it as
+ * a `**: Type**` markdown line. Returns `undefined` when the cursor
+ * isn't inside a function or impl-method body, or when inference didn't
+ * record a type at that offset.
+ */
+function inferredTypeLineAt(doc: DocState, pos: Position): string | undefined {
+  if (!doc.module) return undefined;
+  const offset = positionToOffset(doc.text, pos);
+  const enclosing = findEnclosingBody(doc.module, offset);
+  if (!enclosing) return undefined;
+
+  const ctx: InferCtx = {
+    env: buildModuleScope(doc.module),
+    structs: buildStructMap(doc.module),
+    impls: buildImplMap(doc.module),
+  };
+  // Parameters of the enclosing function/method live in the body scope.
+  // Push a fresh layer so the env stays clean on the way out, define the
+  // params, then run `inferBody` to capture every nested `let` / match-
+  // arm binding in the types map. After it returns the walker has
+  // popped its own scope, but the recorded types remain.
+  ctx.env.push();
+  try {
+    for (const p of parseParamList(enclosing.params)) {
+      ctx.env.define(p.name, { type: parseType(p.type), kind: "param" });
+    }
+    // Pre-seed locals introduced by `let` statements so a re-run of
+    // `inferExpression` on an ancestor expression resolves references
+    // the same way the walker did at the original site. (Nested-block-
+    // only locals leak out under this approach; acceptable for hover,
+    // where the alternative is no answer at all.)
+    seedLocals(enclosing.body, ctx);
+    const inferred = inferBody(enclosing.body, ctx);
+    const type = lookupTypeAt(enclosing.body, offset, ctx, inferred.types);
+    if (!type) return undefined;
+    return `**: ${display(type)}**`;
+  } finally {
+    ctx.env.pop();
+  }
+}
+
+/**
+ * Walk the body recursively and define every `let` binding in the
+ * current env. Used to make `inferExpression` re-runs against ancestor
+ * nodes resolve local references after the walker's scope chain has
+ * been popped.
+ */
+function seedLocals(root: unknown, ctx: InferCtx): void {
+  const visit = (node: unknown): void => {
+    if (!node || typeof node !== "object") return;
+    const n = node as Record<string, unknown> & { kind?: unknown };
+    if (n.kind === "variable_declaration") {
+      const decl = n as unknown as N.VariableDeclarationNode;
+      const valueType = decl.value
+        ? inferExpression(decl.value as N.AstNode, ctx)
+        : parseType("");
+      const boundType = decl.type ? parseType(decl.type.text) : valueType;
+      ctx.env.define(decl.name.text, { type: boundType, kind: "local" });
+    }
+    for (const key of Object.keys(n)) {
+      if (TYPE_HOVER_SKIP_KEYS.has(key)) continue;
+      const v = n[key];
+      if (Array.isArray(v)) for (const c of v) visit(c);
+      else if (v && typeof v === "object") visit(v);
+    }
+  };
+  visit(root);
+}
+
+interface EnclosingBody {
+  body: N.StatementBlockNode;
+  params: string;
+}
+
+function findEnclosingBody(module: M.Module, offset: number): EnclosingBody | undefined {
+  for (const part of module.parts) {
+    if (part.kind === "function") {
+      if (!part.bodyAst) continue;
+      if (offset < part.bodyAst.startIndex || offset > part.bodyAst.endIndex) continue;
+      return { body: part.bodyAst, params: part.params };
+    }
+    if (part.kind === "impl") {
+      for (const m of part.methods) {
+        if (!m.bodyAst) continue;
+        if (offset < m.bodyAst.startIndex || offset > m.bodyAst.endIndex) continue;
+        return { body: m.bodyAst, params: m.params };
+      }
+    }
+    if (part.kind === "trait") {
+      for (const m of part.methods) {
+        if (!m.bodyAst) continue;
+        if (offset < m.bodyAst.startIndex || offset > m.bodyAst.endIndex) continue;
+        return { body: m.bodyAst, params: m.params };
+      }
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Find the tightest expression node covering `offset` whose inferred
+ * type is concrete. Walks AST ancestors innermost-out: identifier
+ * lookups read from `recorded` (so `let`-bindings and match-arm names
+ * resolve), other nodes re-run `inferExpression` against `ctx` (which
+ * sidesteps a walker quirk where an inner identifier's recorded type
+ * overwrites the parent expression's entry at the same `startIndex` —
+ * e.g. `p.name` and the bare `p` both start at the same byte).
+ */
+function lookupTypeAt(
+  root: N.AstNode,
+  offset: number,
+  ctx: InferCtx,
+  recorded: ReadonlyMap<number, Type>,
+): Type | undefined {
+  const ancestors: N.AstNode[] = [];
+  const visit = (node: unknown): void => {
+    if (!node || typeof node !== "object") return;
+    const n = node as N.AstNode & Record<string, unknown>;
+    if (typeof n.kind !== "string") return;
+    if (typeof n.startIndex !== "number" || typeof n.endIndex !== "number") return;
+    if (offset < n.startIndex || offset > n.endIndex) return;
+    ancestors.push(n);
+    for (const key of Object.keys(n)) {
+      if (TYPE_HOVER_SKIP_KEYS.has(key)) continue;
+      const v = n[key];
+      if (Array.isArray(v)) for (const c of v) visit(c);
+      else if (v && typeof v === "object") visit(v);
+    }
+  };
+  visit(root);
+  if (ancestors.length === 0) return undefined;
+
+  let firstUnboundIdent: Type | undefined;
+  for (let i = ancestors.length - 1; i >= 0; i--) {
+    const node = ancestors[i]!;
+    const t = node.kind === "identifier"
+      ? (recorded.get(node.startIndex) ?? inferExpression(node, ctx))
+      : inferExpression(node, ctx);
+    if (t.kind === "unknown") {
+      // Preserve the innermost unbound-identifier diagnostic so hover
+      // can show `: unknown<unbound: name>` when nothing else resolves.
+      if (
+        !firstUnboundIdent &&
+        typeof t.reason === "string" &&
+        t.reason.startsWith("unbound:")
+      ) {
+        firstUnboundIdent = t;
+      }
+      continue;
+    }
+    return t;
+  }
+  return firstUnboundIdent;
+}
+
+const TYPE_HOVER_SKIP_KEYS = new Set([
+  "kind",
+  "text",
+  "startIndex",
+  "endIndex",
+  "startPosition",
+  "endPosition",
+  "type",
+]);
 
 function hoverMarkdown(signature: string, doc: string | undefined): string {
   // Code-block the signature so editors render it in monospace, then
