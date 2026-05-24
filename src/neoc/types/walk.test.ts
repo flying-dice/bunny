@@ -243,3 +243,85 @@ test("match arm with struct shorthand binds field types into the arm scope", asy
   // The binding shouldn't leak past the arm.
   expect(ctx.env.lookup("id")).toBeUndefined();
 });
+
+// ---------------------------------------------------------------------------
+// Exhaustiveness on struct unions
+// ---------------------------------------------------------------------------
+
+test("match on a struct union flags missing variants", async () => {
+  const { ctx, bodyOf } = await buildCtx(`
+    struct A {}
+    struct B {}
+    struct C {}
+    pub fn pick(x: A | B | C) -> string {
+      return match x {
+        A => "a",
+        B => "b",
+      }
+    }
+  `);
+  ctx.env.define("x", {
+    type: { kind: "union", variants: [
+      { kind: "struct", name: "A" },
+      { kind: "struct", name: "B" },
+      { kind: "struct", name: "C" },
+    ] },
+    kind: "param",
+  });
+  const result = inferBody(bodyOf("pick"), ctx);
+  const exhaust = result.diagnostics.find((d) =>
+    d.message.startsWith("non-exhaustive match"),
+  );
+  expect(exhaust).toBeDefined();
+  expect(exhaust!.message).toContain("C");
+});
+
+test("wildcard arm satisfies exhaustiveness", async () => {
+  const { ctx, bodyOf } = await buildCtx(`
+    struct A {}
+    struct B {}
+    pub fn pick(x: A | B) -> string {
+      return match x {
+        A => "a",
+        _ => "rest",
+      }
+    }
+  `);
+  ctx.env.define("x", {
+    type: { kind: "union", variants: [
+      { kind: "struct", name: "A" },
+      { kind: "struct", name: "B" },
+    ] },
+    kind: "param",
+  });
+  const result = inferBody(bodyOf("pick"), ctx);
+  const exhaust = result.diagnostics.find((d) =>
+    d.message.startsWith("non-exhaustive match"),
+  );
+  expect(exhaust).toBeUndefined();
+});
+
+test("full coverage of a struct union reports no diagnostic", async () => {
+  const { ctx, bodyOf } = await buildCtx(`
+    struct A { n: number }
+    struct B { s: string }
+    pub fn pick(x: A | B) -> string {
+      return match x {
+        A { n } => "a",
+        B { s } => s,
+      }
+    }
+  `);
+  ctx.env.define("x", {
+    type: { kind: "union", variants: [
+      { kind: "struct", name: "A" },
+      { kind: "struct", name: "B" },
+    ] },
+    kind: "param",
+  });
+  const result = inferBody(bodyOf("pick"), ctx);
+  const exhaust = result.diagnostics.find((d) =>
+    d.message.startsWith("non-exhaustive match"),
+  );
+  expect(exhaust).toBeUndefined();
+});

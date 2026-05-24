@@ -225,12 +225,13 @@ function walkMatch(
   // Don't dispatch through `inferExpression` for the match node
   // itself — its overall type is the union of its arm bodies, and
   // we compute that below by walking each arm in its own scope.
-  walkExpr(node.scrutinee as N.AstNode, ctx, out);
+  const scrutineeType = walkExpr(node.scrutinee as N.AstNode, ctx, out);
 
   const armTypes: Type[] = [];
   for (const arm of node.children) {
     armTypes.push(walkArm(arm, ctx, out));
   }
+  checkExhaustiveness(node, scrutineeType, out);
   const t: Type = armTypes.length === 0
     ? UNKNOWN
     : armTypes.length === 1
@@ -238,6 +239,63 @@ function walkMatch(
       : { kind: "union", variants: dedupeVariants(armTypes) };
   out.types.set(node.startIndex, t);
   return t;
+}
+
+/**
+ * Report missing variants when a `match` scrutinee resolves to a
+ * struct union and the arms don't cover every member. A wildcard
+ * (`_`) or bare-name binding pattern is treated as a catch-all and
+ * suppresses the diagnostic. Scrutinees whose type is anything other
+ * than a single struct or a union of structs are skipped — generic
+ * applications, primitives, and unresolved types fall through silently
+ * so the check stays additive.
+ */
+function checkExhaustiveness(
+  node: N.MatchExpressionNode,
+  scrutineeType: Type,
+  out: Inferred,
+): void {
+  const required = collectStructVariants(scrutineeType);
+  if (required.length === 0) return;
+
+  const matched = new Set<string>();
+  for (const arm of node.children) {
+    const p = arm.pattern;
+    if (p.kind === "wildcard_pattern" || p.kind === "binding_pattern") {
+      return;
+    }
+    if (p.kind === "struct_pattern" && !arm.guard) {
+      matched.add(p.name.text);
+    }
+  }
+
+  const missing = required.filter((name) => !matched.has(name));
+  if (missing.length === 0) return;
+
+  out.diagnostics.push({
+    message: `non-exhaustive match: missing ${missing.join(", ")}`,
+    range: { start: node.startIndex, end: node.endIndex },
+  });
+}
+
+/**
+ * Pull struct names out of a scrutinee type for exhaustiveness. A
+ * single struct yields a one-element list; a union of structs yields
+ * each variant. Any non-struct member of the union forces a bail-out
+ * (empty list) — the check only runs when every variant is a struct
+ * we can name directly.
+ */
+function collectStructVariants(t: Type): string[] {
+  if (t.kind === "struct") return [t.name];
+  if (t.kind === "union") {
+    const names: string[] = [];
+    for (const v of t.variants) {
+      if (v.kind !== "struct") return [];
+      names.push(v.name);
+    }
+    return names;
+  }
+  return [];
 }
 
 /**
