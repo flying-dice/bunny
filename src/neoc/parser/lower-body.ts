@@ -330,8 +330,19 @@ function emitMember(node: N.MemberExpressionNode): string {
 
 function emitSubscript(node: N.SubscriptExpressionNode): string {
   const obj = emitExpression(node.object as N.AstNode);
-  const index = emitExpression(node.index as N.AstNode);
-  return `${obj}[${index}]`;
+  const index = node.index as N.AstNode;
+  // neoc exposes 0-based indexing; Lua tables are 1-based. Shift
+  // numeric subscripts by `+ 1` so `arr[0]` reads the first element.
+  // String / template-string indices are dict-style lookups and pass
+  // through unshifted — they're keys, not array offsets.
+  if (index.kind === "string" || index.kind === "template_string") {
+    return `${obj}[${emitExpression(index)}]`;
+  }
+  if (index.kind === "number") {
+    const literal = Number(index.text);
+    if (Number.isInteger(literal)) return `${obj}[${literal + 1}]`;
+  }
+  return `${obj}[(${emitExpression(index)}) + 1]`;
 }
 
 function emitObjectLiteral(node: N.ObjectLiteralNode): string {
