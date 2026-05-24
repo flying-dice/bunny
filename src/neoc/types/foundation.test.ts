@@ -92,10 +92,17 @@ test("parseType: empty string → unknown", () => {
   expect(parseType("").kind).toBe("unknown");
 });
 
-test("parseType: anything more elaborate → unknown<reason>", () => {
+test("parseType: applied generics resolve to a GenericApplication", () => {
   const t = parseType("Result<number, Error>");
-  expect(t.kind).toBe("unknown");
-  expect((t as { reason?: string }).reason).toBe("Result<number, Error>");
+  expect(t.kind).toBe("generic_app");
+  expect((t as { base: string }).base).toBe("Result");
+  expect(display(t)).toBe("Result<number, Error>");
+});
+
+test("parseType: nested generics parse recursively", () => {
+  const t = parseType("Result<Option<number>, ParseError>");
+  expect(t.kind).toBe("generic_app");
+  expect(display(t)).toBe("Result<Option<number>, ParseError>");
 });
 
 // -- Module scope -------------------------------------------------------------

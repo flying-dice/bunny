@@ -177,14 +177,29 @@ test("binding pattern (`x => ...`) makes the scrutinee type visible in the arm",
 // try_expression
 // ---------------------------------------------------------------------------
 
-test("try expression on a Result-returning call is Unknown with descriptive reason", async () => {
+test("try expression narrows Result<T, E> down to T", async () => {
   const { ctx, bodyOf } = await buildCtx(`
-    extern fn loadUser(id: string) -> Result<User, Error>
-    pub fn run(id: string) -> string { return loadUser(id)? }
+    struct User { id: string }
+    struct Error { msg: string }
+    ext fn loadUser(id: string) -> Result<User, Error>;
+    pub fn run(id: string) -> User { return loadUser(id)? }
+  `);
+  const tryNode = findNode(bodyOf("run"), (n) => n.kind === "try_expression");
+  expect(tryNode).toBeDefined();
+  const t = inferExpression(tryNode, ctx);
+  // `Result<User, Error>?` should narrow to `User`.
+  expect(t.kind).toBe("struct");
+  expect((t as { name: string }).name).toBe("User");
+});
+
+test("try expression on a non-Result inner expression stays Unknown", async () => {
+  const { ctx, bodyOf } = await buildCtx(`
+    ext fn parseInt(s: string) -> number;
+    pub fn run(s: string) -> number { return parseInt(s)? }
   `);
   const tryNode = findNode(bodyOf("run"), (n) => n.kind === "try_expression");
   expect(tryNode).toBeDefined();
   const t = inferExpression(tryNode, ctx);
   expect(t.kind).toBe("unknown");
-  expect((t as { reason?: string }).reason).toBe("try: opaque Result");
+  expect((t as { reason?: string }).reason).toContain("try: ");
 });

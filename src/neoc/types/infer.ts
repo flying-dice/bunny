@@ -187,12 +187,27 @@ export function inferExpression(
     case "match_expression":
       return inferMatch(node as N.MatchExpressionNode, ctx);
 
-    // `expr?` — the `Result<T, E>` unwrap. We can't see the generics
-    // yet (parseType collapses `Result<T, E>` to Unknown), so report
-    // the limitation verbatim. When generics inference lands, the
-    // inner expression's type will carry T and this case improves.
-    case "try_expression":
-      return Type.unknown("try: opaque Result");
+    // `expr?` — the `Result<T, E>` unwrap. Infer the inner
+    // expression. If it lands as a `Result<T, E>` generic
+    // application, return `T`. Anything else stays Unknown with
+    // the inner type's display included for the hover popup.
+    case "try_expression": {
+      // The inner expression sits as the try_expression's only named
+      // child. Walk children defensively because tree-sitter's typed
+      // shape doesn't index positionally.
+      const tryNode = node as N.TryExpressionNode;
+      const innerNode = (tryNode as unknown as { children?: N.AstNode[] })
+        .children?.[0];
+      const inner = inferExpression(innerNode, ctx);
+      if (
+        inner.kind === "generic_app" &&
+        inner.base === "Result" &&
+        inner.args.length >= 1
+      ) {
+        return inner.args[0]!;
+      }
+      return Type.unknown(`try: ${display(inner)}`);
+    }
 
     // Range expression `a..b` / `a..=b`. The lowering wraps an IIFE
     // that produces a Lua sequence table; the resulting value is

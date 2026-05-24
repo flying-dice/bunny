@@ -22,6 +22,7 @@ export type Type =
   | UnionType
   | FnType
   | GenericType
+  | GenericApplicationType
   | TupleType
   | UnknownType;
 
@@ -63,6 +64,17 @@ export interface FnType {
 export interface GenericType {
   kind: "generic";
   name: string;
+}
+
+/**
+ * An applied generic — e.g. `Result<number, ParseError>` or
+ * `Option<string>`. `base` is the user-visible name; `args` are the
+ * type arguments in declaration order.
+ */
+export interface GenericApplicationType {
+  kind: "generic_app";
+  base: string;
+  args: Type[];
 }
 
 export interface TupleType {
@@ -107,6 +119,9 @@ export const Type = {
   generic(name: string): GenericType {
     return { kind: "generic", name };
   },
+  genericApp(base: string, args: Type[]): GenericApplicationType {
+    return { kind: "generic_app", base, args };
+  },
   tuple(elements: Type[]): TupleType {
     return { kind: "tuple", elements };
   },
@@ -143,6 +158,8 @@ export function display(t: Type): string {
       return `fn(${ps}) -> ${display(t.ret)}`;
     }
     case "generic": return t.name;
+    case "generic_app":
+      return `${t.base}<${t.args.map(display).join(", ")}>`;
     case "tuple": return `(${t.elements.map(display).join(", ")})`;
     case "unknown": return t.reason ? `unknown<${t.reason}>` : "unknown";
   }
@@ -176,6 +193,12 @@ export function equals(a: Type, b: Type): boolean {
     }
     case "generic":
       return a.name === (b as GenericType).name;
+    case "generic_app": {
+      const bg = b as GenericApplicationType;
+      if (a.base !== bg.base) return false;
+      if (a.args.length !== bg.args.length) return false;
+      return a.args.every((arg, i) => equals(arg, bg.args[i]!));
+    }
     case "tuple": {
       const bt = b as TupleType;
       if (a.elements.length !== bt.elements.length) return false;
@@ -217,9 +240,16 @@ export function parseType(source: string): Type {
     case "any": return ANY;
     case "table": return TABLE;
   }
-  // Bare uppercase identifier → struct reference. Anything else
-  // (generics, conditional types, function types) is Unknown for v1.
+  // Bare uppercase identifier → struct reference.
   if (/^[A-Z][A-Za-z0-9_]*$/.test(trimmed)) return Type.struct(trimmed);
+  // Applied generic — `Foo<T, U>`. Match `Name<args>` and split args
+  // at top-level commas. Inner args parse recursively, so nested
+  // generics (`Result<Option<number>, Err>`) Just Work.
+  const app = /^([A-Z][A-Za-z0-9_]*)<(.+)>$/.exec(trimmed);
+  if (app) {
+    const args = splitTopLevel(app[2]!, ",").map((s) => parseType(s));
+    return Type.genericApp(app[1]!, args);
+  }
   return Type.unknown(trimmed);
 }
 
