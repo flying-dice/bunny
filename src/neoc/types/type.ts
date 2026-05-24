@@ -231,8 +231,14 @@ export function parseType(source: string): Type {
   const trimmed = source.trim();
   if (trimmed.length === 0) return UNKNOWN;
   if (trimmed.includes("|")) {
-    const variants = splitTopLevel(trimmed, "|").map((s) => parseType(s));
-    return Type.union(variants);
+    const parts = splitTopLevel(trimmed, "|");
+    // Only treat as a union when `|` appears at the top level — a
+    // bare `Result<A | B>` keeps every pipe inside the angle
+    // brackets, so `splitTopLevel` returns a one-element list and
+    // we fall through to the generic-application branch below.
+    if (parts.length > 1) {
+      return Type.union(parts.map((s) => parseType(s)));
+    }
   }
   switch (trimmed) {
     case "number": return NUMBER;

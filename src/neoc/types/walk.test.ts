@@ -302,6 +302,55 @@ test("wildcard arm satisfies exhaustiveness", async () => {
 });
 
 // ---------------------------------------------------------------------------
+// Call-site arity + arg type checking
+// ---------------------------------------------------------------------------
+
+test("call with too few args surfaces an arity diagnostic", async () => {
+  const { ctx, bodyOf } = await buildCtx(`
+    ext fn add(a: number, b: number) -> number;
+    pub fn run() -> number { return add(1) }
+  `);
+  ctx.expectedReturn = NUMBER;
+  const result = inferBody(bodyOf("run"), ctx);
+  const arity = result.diagnostics.find((d) =>
+    d.message.startsWith("wrong number of arguments"),
+  );
+  expect(arity).toBeDefined();
+  expect(arity!.message).toContain("expected 2");
+  expect(arity!.message).toContain("got 1");
+});
+
+test("call with mismatched arg type surfaces a per-arg diagnostic", async () => {
+  const { ctx, bodyOf } = await buildCtx(`
+    ext fn add(a: number, b: number) -> number;
+    pub fn run() -> number { return add(1, "two") }
+  `);
+  ctx.expectedReturn = NUMBER;
+  const result = inferBody(bodyOf("run"), ctx);
+  const argDiag = result.diagnostics.find((d) =>
+    d.message.startsWith("argument 2"),
+  );
+  expect(argDiag).toBeDefined();
+  expect(argDiag!.message).toContain("expected number");
+  expect(argDiag!.message).toContain("got string");
+});
+
+test("call with all args correct stays silent", async () => {
+  const { ctx, bodyOf } = await buildCtx(`
+    ext fn add(a: number, b: number) -> number;
+    pub fn run() -> number { return add(1, 2) }
+  `);
+  ctx.expectedReturn = NUMBER;
+  const result = inferBody(bodyOf("run"), ctx);
+  const callDiag = result.diagnostics.find(
+    (d) =>
+      d.message.startsWith("wrong number of arguments") ||
+      d.message.startsWith("argument "),
+  );
+  expect(callDiag).toBeUndefined();
+});
+
+// ---------------------------------------------------------------------------
 // Annotated-let type-mismatch checking
 // ---------------------------------------------------------------------------
 

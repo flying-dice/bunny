@@ -116,11 +116,33 @@ function checkReturnType(
 ): void {
   const expected = ctx.expectedReturn;
   if (!expected) return;
+  if (!isConcrete(expected) || !isConcrete(valueType)) return;
   if (equals(expected, valueType)) return;
   out.diagnostics.push({
     message: `return type mismatch: expected ${display(expected)}, got ${display(valueType)}`,
     range: { start: node.startIndex, end: node.endIndex },
   });
+}
+
+/**
+ * Conservative "is this a type we're willing to compare strictly"
+ * predicate. Used to gate the return / let / call-arg mismatch
+ * diagnostics so they only fire on unambiguous shapes. The V1
+ * inference engine is lossy in several spots (range expressions
+ * widen to `table`, block expressions can produce unions, etc.) —
+ * complaining when either side is a union, fn, tuple, or unresolved
+ * generic application would generate false positives faster than it
+ * caught real bugs.
+ */
+function isConcrete(t: Type): boolean {
+  switch (t.kind) {
+    case "primitive":
+      return t.name !== "any" && t.name !== "table";
+    case "struct":
+      return true;
+    default:
+      return false;
+  }
 }
 
 function walkVariableDeclaration(
@@ -136,7 +158,12 @@ function walkVariableDeclaration(
   if (node.type) {
     const declared = parseType(node.type.text);
     boundType = declared;
-    if (node.value && !equals(declared, valueType)) {
+    if (
+      node.value &&
+      isConcrete(declared) &&
+      isConcrete(valueType) &&
+      !equals(declared, valueType)
+    ) {
       out.diagnostics.push({
         message: `type mismatch: ${node.name.text} declared as ${display(declared)}, got ${display(valueType)}`,
         range: { start: node.startIndex, end: node.endIndex },
@@ -190,10 +217,66 @@ function walkExpr(node: N.AstNode, ctx: InferCtx, out: Inferred): Type {
     return t;
   }
 
+  // The property side of a member expression is resolved by
+  // `inferMemberExpression` against the object's type — recursing
+  // into it as a free identifier would emit a spurious unbound
+  // diagnostic for every `obj.field` site. Walk only the object.
+  if (node.kind === "member_expression") {
+    const mem = node as N.MemberExpressionNode;
+    walkExpr(mem.object as N.AstNode, ctx, out);
+    return t;
+  }
+
   for (const child of expressionChildren(node)) {
     walkExpr(child, ctx, out);
   }
+
+  if (node.kind === "call_expression") {
+    checkCallSite(node as N.CallExpressionNode, ctx, out);
+  }
   return t;
+}
+
+/**
+ * Diagnose arity and per-arg type mismatches at a call site. Skips
+ * when the callee resolves to anything other than a concrete `fn`
+ * type — struct constructors, unknown callees, and method-table
+ * placeholders fall through silently. Per-arg comparison uses
+ * `equals`, which already waves through `any` and `unknown`, so
+ * partial inference doesn't generate false positives.
+ */
+function checkCallSite(
+  node: N.CallExpressionNode,
+  ctx: InferCtx,
+  out: Inferred,
+): void {
+  const calleeType = inferExpression(node.function, ctx);
+  if (calleeType.kind !== "fn") return;
+
+  const args = node.arguments?.children ?? [];
+  if (args.length !== calleeType.params.length) {
+    out.diagnostics.push({
+      message: `wrong number of arguments: expected ${calleeType.params.length}, got ${args.length}`,
+      range: { start: node.startIndex, end: node.endIndex },
+    });
+    return;
+  }
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]!;
+    const param = calleeType.params[i]!;
+    const argType = inferExpression(arg, ctx);
+    if (
+      isConcrete(param.type) &&
+      isConcrete(argType) &&
+      !equals(param.type, argType)
+    ) {
+      out.diagnostics.push({
+        message: `argument ${i + 1} (${param.name}): expected ${display(param.type)}, got ${display(argType)}`,
+        range: { start: arg.startIndex, end: arg.endIndex },
+      });
+    }
+  }
 }
 
 /**
