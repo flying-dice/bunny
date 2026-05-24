@@ -13,7 +13,7 @@
  */
 
 import type * as M from "../ast/index.ts";
-import { type Type, parseType, UNKNOWN } from "./type.ts";
+import { type Type, parseType, Type as TypeC, UNKNOWN, ANY } from "./type.ts";
 
 export interface ScopeEntry {
   type: Type;
@@ -70,6 +70,24 @@ export class TypeEnv {
  */
 export function buildModuleScope(module: M.Module): TypeEnv {
   const env = new TypeEnv();
+
+  // Ambient bindings — `Ok` / `Err` are auto-injected by the codegen's
+  // Result prelude, so every module gets them in scope. The codegen
+  // also recognises `Result` as a type identifier. Without proper
+  // type-parameter inference we type them broadly: any value goes in,
+  // a Result generic application comes out. Hover still surfaces the
+  // shape; downstream `?` narrowing only relies on the caller's
+  // declared return type, not on what `Ok(...)` produces locally.
+  const resultAnyAny = TypeC.genericApp("Result", [ANY, ANY]);
+  env.define("Ok", {
+    type: TypeC.fn([{ name: "value", type: ANY }], resultAnyAny),
+    kind: "fn",
+  });
+  env.define("Err", {
+    type: TypeC.fn([{ name: "error", type: ANY }], resultAnyAny),
+    kind: "fn",
+  });
+
   for (const part of module.parts) {
     switch (part.kind) {
       case "struct":
