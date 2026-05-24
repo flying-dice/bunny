@@ -13,7 +13,7 @@
 import { expect, test } from "bun:test";
 import { parseViaTreeSitter } from "../parser/adapter.ts";
 import type * as N from "../ast/nodes.generated.ts";
-import { NUMBER, STRING, display, equals } from "./type.ts";
+import { NUMBER, STRING, display, equals, parseType } from "./type.ts";
 import { buildModuleScope } from "./env.ts";
 import { buildStructMap, type InferCtx } from "./infer.ts";
 import { inferBody } from "./walk.ts";
@@ -299,6 +299,60 @@ test("wildcard arm satisfies exhaustiveness", async () => {
     d.message.startsWith("non-exhaustive match"),
   );
   expect(exhaust).toBeUndefined();
+});
+
+// ---------------------------------------------------------------------------
+// Return-type checking
+// ---------------------------------------------------------------------------
+
+test("return type mismatch surfaces a diagnostic", async () => {
+  const { ctx, bodyOf } = await buildCtx(`
+    pub fn label() -> number {
+      return "hello"
+    }
+  `);
+  ctx.expectedReturn = NUMBER;
+  const result = inferBody(bodyOf("label"), ctx);
+  const mismatch = result.diagnostics.find((d) =>
+    d.message.startsWith("return type mismatch"),
+  );
+  expect(mismatch).toBeDefined();
+  expect(mismatch!.message).toContain("expected number");
+  expect(mismatch!.message).toContain("got string");
+});
+
+test("matching return type stays silent", async () => {
+  const { ctx, bodyOf } = await buildCtx(`
+    pub fn label() -> string {
+      return "hello"
+    }
+  `);
+  ctx.expectedReturn = STRING;
+  const result = inferBody(bodyOf("label"), ctx);
+  const mismatch = result.diagnostics.find((d) =>
+    d.message.startsWith("return type mismatch"),
+  );
+  expect(mismatch).toBeUndefined();
+});
+
+test("Result<any, any> from `Ok(...)` satisfies a declared Result<T, E>", async () => {
+  // `Ok` is seeded as `fn(value: any) -> Result<any, any>` because we
+  // don't yet infer the type parameters from the call site. The
+  // permissive treatment of `any` in `equals` means returning `Ok(42)`
+  // still satisfies a declared `Result<number, ParseError>` — no
+  // false-positive mismatch.
+  const { ctx, bodyOf } = await buildCtx(`
+    struct ParseError {}
+    pub fn run() -> Result<number, ParseError> {
+      return Ok(42)
+    }
+  `);
+  ctx.expectedReturn = parseType("Result<number, ParseError>");
+  const result = inferBody(bodyOf("run"), ctx);
+  const mismatch = result.diagnostics.find((d) =>
+    d.message.startsWith("return type mismatch"),
+  );
+  expect(mismatch).toBeUndefined();
 });
 
 test("full coverage of a struct union reports no diagnostic", async () => {

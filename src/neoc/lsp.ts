@@ -775,21 +775,21 @@ export function inferenceDiagnostics(
   for (const part of doc.module.parts) {
     if (part.kind === "function") {
       if (part.bodyAst) {
-        collectInferenceDiagnostics(doc, part.bodyAst, part.params, undefined, workspace, out);
+        collectInferenceDiagnostics(doc, part.bodyAst, part.params, part.returnType, undefined, workspace, out);
       }
       continue;
     }
     if (part.kind === "impl") {
       for (const method of part.methods) {
         if (!method.bodyAst) continue;
-        collectInferenceDiagnostics(doc, method.bodyAst, method.params, part.name, workspace, out);
+        collectInferenceDiagnostics(doc, method.bodyAst, method.params, method.returnType, part.name, workspace, out);
       }
       continue;
     }
     if (part.kind === "trait") {
       for (const method of part.methods) {
         if (!method.bodyAst) continue;
-        collectInferenceDiagnostics(doc, method.bodyAst, method.params, undefined, workspace, out);
+        collectInferenceDiagnostics(doc, method.bodyAst, method.params, method.returnType, undefined, workspace, out);
       }
       continue;
     }
@@ -801,6 +801,7 @@ function collectInferenceDiagnostics(
   doc: DocState,
   body: N.StatementBlockNode,
   paramsText: string,
+  returnTypeText: string,
   selfStructName: string | undefined,
   workspace: ReadonlyMap<string, WorkspaceSymbol>,
   out: LspDiagnostic[],
@@ -810,6 +811,7 @@ function collectInferenceDiagnostics(
     env: buildModuleScope(doc.module),
     structs: buildStructMap(doc.module),
     impls: buildImplMap(doc.module),
+    expectedReturn: parseType(returnTypeText),
   };
   seedWorkspaceNames(ctx.env, doc.module, workspace);
   // Parameters live in a scope wrapped around the body. The walker

@@ -166,13 +166,16 @@ export function display(t: Type): string {
 }
 
 /**
- * Structural equality. `unknown` matches anything (per the V1 "lossy"
- * contract — diagnostics about Unknown propagation belong in their
- * own pass).
+ * Structural equality. `unknown` and `any` both match anything —
+ * `unknown` per the V1 "lossy" contract, and `any` because it sits at
+ * the top of the type lattice (escape-hatch semantics). Diagnostics
+ * about Unknown propagation belong in their own pass.
  */
 export function equals(a: Type, b: Type): boolean {
   if (a === b) return true;
   if (a.kind === "unknown" || b.kind === "unknown") return true;
+  if (a.kind === "primitive" && a.name === "any") return true;
+  if (b.kind === "primitive" && b.name === "any") return true;
   if (a.kind !== b.kind) return false;
   switch (a.kind) {
     case "primitive":

@@ -50,6 +50,13 @@ export interface InferCtx {
    * `toCtx` defaults a missing slot to an empty map.
    */
   impls?: Map<string, M.ImplDecl[]>;
+  /**
+   * Declared return type of the enclosing function body. When set,
+   * the statement walker checks each `return` against it; when unset
+   * (e.g. expression-only inference, no enclosing fn), the check is
+   * skipped.
+   */
+  expectedReturn?: Type;
 }
 
 /**

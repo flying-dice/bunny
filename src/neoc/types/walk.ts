@@ -17,6 +17,9 @@ import {
   type Type,
   parseType,
   UNKNOWN,
+  VOID,
+  display,
+  equals,
 } from "./type.ts";
 import { inferExpression, type InferCtx, type TypeDiagnostic } from "./infer.ts";
 
@@ -75,7 +78,14 @@ function walkStatement(node: N.AstNode, ctx: InferCtx, out: Inferred): void {
       return;
     case "return_statement": {
       const ret = node as N.ReturnStatementNode;
-      if (ret.children) walkExpr(ret.children as N.AstNode, ctx, out);
+      // `children` is typed as a single node but the adapter surfaces
+      // positional children as a one-element array. Normalise to the
+      // first named child either way.
+      const inner = Array.isArray(ret.children)
+        ? (ret.children[0] as N.AstNode | undefined)
+        : (ret.children as N.AstNode | undefined);
+      const valueType = inner ? walkExpr(inner, ctx, out) : VOID;
+      checkReturnType(ret, valueType, ctx, out);
       return;
     }
     case "statement_block":
@@ -89,6 +99,28 @@ function walkStatement(node: N.AstNode, ctx: InferCtx, out: Inferred): void {
       walkExpr(node, ctx, out);
       return;
   }
+}
+
+/**
+ * Diagnose a return whose value type doesn't match the enclosing
+ * function's declared return. Off entirely when `ctx.expectedReturn`
+ * is unset (expression-only callers, ad-hoc inference). `equals`
+ * already waves through `any` and `unknown`, so partial inference
+ * doesn't generate noise — only concrete mismatches surface.
+ */
+function checkReturnType(
+  node: N.ReturnStatementNode,
+  valueType: Type,
+  ctx: InferCtx,
+  out: Inferred,
+): void {
+  const expected = ctx.expectedReturn;
+  if (!expected) return;
+  if (equals(expected, valueType)) return;
+  out.diagnostics.push({
+    message: `return type mismatch: expected ${display(expected)}, got ${display(valueType)}`,
+    range: { start: node.startIndex, end: node.endIndex },
+  });
 }
 
 function walkVariableDeclaration(
