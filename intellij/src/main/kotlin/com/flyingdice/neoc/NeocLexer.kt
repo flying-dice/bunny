@@ -198,7 +198,7 @@ class NeocLexer : LexerBase() {
       // neoc declaration surface
       "import", "from", "pub", "as", "type",
       "struct", "impl", "trait", "match", "for",
-      "fn", "self", "Self",
+      "fn", "ext", "self", "Self",
       // Lua control flow + bindings (used inside method bodies)
       "local", "return", "if", "then", "else", "elseif", "end",
       "do", "while", "repeat", "until", "in", "break",

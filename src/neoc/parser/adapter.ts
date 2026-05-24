@@ -101,6 +101,9 @@ function convertTopLevel(
     case "function_declaration":
       parts.push(convertFunction(node as N.FunctionDeclarationNode, pendingAttrs));
       return;
+    case "extern_function_declaration":
+      parts.push(convertExternFunction(node as N.ExternFunctionDeclarationNode, pendingAttrs));
+      return;
     default:
       // Everything else (imports, exports, type aliases, variable
       // declarations, free expression statements) passes through as
@@ -322,6 +325,27 @@ function convertFunction(
     body: lowerAll(node.body),
     attrs: pendingAttrs,
     isAsync: node.text.includes("async"),
+    span: { start: node.startIndex, end: node.endIndex },
+  };
+}
+
+function convertExternFunction(
+  node: N.ExternFunctionDeclarationNode,
+  pendingAttrs: M.Attr[],
+): M.ExternFunctionDecl {
+  const params = stripParens(node.parameters.text);
+  const returnType = node.return_type?.text ?? "";
+  const signature = returnType
+    ? `${node.parameters.text} -> ${returnType}`
+    : node.parameters.text;
+  return {
+    kind: "extern_function",
+    name: node.name.text,
+    exported: node.text.startsWith("pub"),
+    signature,
+    params,
+    returnType,
+    attrs: pendingAttrs,
     span: { start: node.startIndex, end: node.endIndex },
   };
 }

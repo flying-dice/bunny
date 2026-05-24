@@ -136,6 +136,10 @@ export function emit(
         push(replaced ?? emitFunction(part), part.span.start);
         break;
       }
+      case "extern_function":
+        // No emit — the signature exists purely for inference and the
+        // LSP. The runtime is responsible for providing the binding.
+        break;
     }
   }
 

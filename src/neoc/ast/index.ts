@@ -153,12 +153,31 @@ export interface FunctionDecl {
   span: Span;
 }
 
+/**
+ * `ext fn name(...) -> T;` — signature-only function declaration. The
+ * compiler emits no Lua for it; it exists purely so inference and the
+ * LSP can resolve runtime-provided names. The runtime (or another
+ * module's hand-written binding file) is responsible for actually
+ * providing the implementation.
+ */
+export interface ExternFunctionDecl {
+  kind: "extern_function";
+  name: string;
+  exported: boolean;
+  signature: string;
+  params: string;
+  returnType: string;
+  attrs: Attr[];
+  span: Span;
+}
+
 export type ModulePart =
   | OpaqueText
   | StructDecl
   | ImplDecl
   | TraitDecl
-  | FunctionDecl;
+  | FunctionDecl
+  | ExternFunctionDecl;
 
 export interface Module {
   parts: ModulePart[];

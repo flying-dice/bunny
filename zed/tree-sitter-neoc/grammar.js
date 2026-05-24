@@ -74,6 +74,7 @@ module.exports = grammar({
       $.type_alias,
       $.attributed_declaration,
       $.function_declaration,
+      $.extern_function_declaration,
       $.struct_declaration,
       $.tuple_struct_declaration,
       $.impl_declaration,
@@ -147,6 +148,22 @@ module.exports = grammar({
       field('parameters', $.arrow_parameters),
       optional(seq('->', field('return_type', $._type))),
       field('body', $.statement_block),
+    ),
+
+    // Signature-only function declaration. Names a function provided by
+    // the runtime (or another module's hand-written binding). The
+    // compiler emits no Lua for it — it exists purely so inference
+    // and the LSP can name-resolve and type-check calls to runtime
+    // intrinsics. Terminate with `;`, no body allowed.
+    extern_function_declaration: $ => seq(
+      optional('pub'),
+      'ext',
+      'fn',
+      field('name', $.identifier),
+      optional(field('generics', $.type_parameters)),
+      field('parameters', $.arrow_parameters),
+      optional(seq('->', field('return_type', $._type))),
+      ';',
     ),
 
     struct_declaration: $ => seq(

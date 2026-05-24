@@ -13,7 +13,7 @@
   "import" "from" "pub" "as" "type"
   "let" "const" "return" "if" "else"
   "struct" "impl" "trait" "match" "for"
-  "fn" "async" "await"
+  "fn" "ext" "async" "await"
 ] @keyword
 
 (self_type) @keyword

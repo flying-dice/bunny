@@ -800,7 +800,7 @@ function missingMessage(traitName: string, missing: TraitMethodSig[]): string {
 // and body-level Lua keywords (used inside method bodies and gaps).
 const KEYWORDS = [
   // neoc declarations (Rust-flavoured surface)
-  "struct", "impl", "trait", "match", "for", "Self", "fn",
+  "struct", "impl", "trait", "match", "for", "Self", "fn", "ext",
   "pub", "import", "from", "as", "type", "let", "mut",
   // Lua control flow + bindings (used inside method bodies)
   "local", "return", "if", "then", "else", "elseif", "end",
