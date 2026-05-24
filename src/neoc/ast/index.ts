@@ -73,6 +73,8 @@ export interface ImplMethod {
   returnType: string;
   /** Verbatim method body, *including* the surrounding braces. */
   body: string;
+  /** Typed tree-sitter body subtree. Same purpose as `FunctionDecl.bodyAst`. */
+  bodyAst?: import("./nodes.generated.ts").StatementBlockNode;
   attrs: Attr[];
   isAsync: boolean;
   span: Span;
@@ -135,6 +137,8 @@ export interface TraitMethod {
    * `undefined` when the method is signature-only (required).
    */
   body: string | undefined;
+  /** Typed tree-sitter body subtree for default-bodied methods. */
+  bodyAst?: import("./nodes.generated.ts").StatementBlockNode;
   attrs: Attr[];
   isAsync: boolean;
   span: Span;
@@ -147,7 +151,19 @@ export interface FunctionDecl {
   signature: string;
   params: string;
   returnType: string;
+  /**
+   * Method body as Lua source — what codegen forwards to the
+   * output file after `match` / `range` / `try` / `block` lowering.
+   */
   body: string;
+  /**
+   * Typed tree-sitter body subtree, kept alongside `body` for the
+   * inference pass and any future analyser that needs to walk
+   * expression-level AST nodes. Codegen never reads this. The walker
+   * lives in `parser/tree-sitter.ts`; node interfaces are generated
+   * into `ast/nodes.generated.ts`.
+   */
+  bodyAst?: import("./nodes.generated.ts").StatementBlockNode;
   attrs: Attr[];
   isAsync: boolean;
   span: Span;

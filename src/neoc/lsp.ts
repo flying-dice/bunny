@@ -287,7 +287,7 @@ export interface DocState {
  */
 interface WorkspaceSymbol {
   name: string;
-  kind: "struct" | "trait" | "function" | "impl";
+  kind: "struct" | "trait" | "function" | "impl" | "extern_function";
   uri: string;
   /** Range of the declaration in its source file. */
   range: Range;
@@ -1214,11 +1214,12 @@ function addTypeCompletions(
   }
 }
 
-function kindFor(symKind: "struct" | "trait" | "function" | "impl"): number {
+function kindFor(symKind: "struct" | "trait" | "function" | "impl" | "extern_function"): number {
   switch (symKind) {
     case "struct": return 22 /* Struct */;
     case "trait": return 8 /* Interface */;
     case "function": return 3 /* Function */;
+    case "extern_function": return 3 /* Function */;
     case "impl": return 22;
   }
 }
@@ -1707,6 +1708,7 @@ function workspaceSymbolKind(kind: WorkspaceSymbol["kind"]): SymbolKindValue {
     case "struct": return SymbolKind.Struct;
     case "trait": return SymbolKind.Interface;
     case "function": return SymbolKind.Function;
+    case "extern_function": return SymbolKind.Function;
     case "impl": return SymbolKind.Class;
   }
 }

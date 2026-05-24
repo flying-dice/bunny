@@ -17,7 +17,7 @@ import { parse } from "./parser/index.ts";
 
 interface HarvestedSymbol {
   name: string;
-  kind: "struct" | "trait" | "function" | "impl";
+  kind: "struct" | "trait" | "function" | "impl" | "extern_function";
   uri: string;
   range: { start: { line: number; character: number }; end: { line: number; character: number } };
   detail: string;
