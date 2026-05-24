@@ -1,0 +1,22 @@
+-- neoc Result prelude
+local function Ok(value) return { ok = true, value = value } end
+local function Err(error) return { ok = false, error = error } end
+
+--- `Result<T, E>` is the canonical "value or error" type. `Ok(v)` wraps
+--- success; `Err(e)` wraps failure. The emitter inlines a local Lua
+--- prelude when any of `Result`, `Ok`, or `Err` is referenced.
+local ParseError = {}
+ParseError.__index = ParseError
+function ParseError.new(data)
+  data._struct = "ParseError"
+  setmetatable(data, ParseError)
+  return data
+end
+
+
+function parsePositive(s)
+  local n = tonumber(s)
+    if n == nil or n <= 0 then return Err(ParseError.new({ input = s })) end
+    return Ok(n)
+end
+

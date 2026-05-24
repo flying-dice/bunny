@@ -1,0 +1,6 @@
+/// Tuple-struct shorthand. `struct Foo(T)` desugars to a one-field
+/// struct with a synthetic `value: T` field. Useful for branding
+/// primitive types so they aren't interchangeable.
+struct ProductId(string)
+
+struct Money(number)

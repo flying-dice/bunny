@@ -1,0 +1,12 @@
+/// Inherent `impl` block. Methods land on the struct's Lua table
+/// and dispatch as `Foo.method(self, …)`.
+struct Counter { n: number }
+
+impl Counter {
+  increment(self: Counter): void {
+    self.n = self.n + 1
+  }
+  value(self: Counter): number {
+    return self.n
+  }
+}

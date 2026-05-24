@@ -1,0 +1,21 @@
+/// `match` is a value-yielding expression with four pattern kinds:
+/// wildcard `_`, literal, binding identifier, struct/object pattern.
+/// Lowers to a Lua IIFE.
+struct Cat {}
+struct Dog {}
+
+export function sound(animal: Cat | Dog): string {
+  return match animal {
+    Cat => "meow",
+    Dog => "woof",
+    _ => "unknown",
+  }
+}
+
+export function describe(x: number): string {
+  return match x {
+    0 => "zero",
+    1 => "one",
+    n => "many: " .. tostring(n),
+  }
+}

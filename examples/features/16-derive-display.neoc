@@ -1,0 +1,9 @@
+/// `#[derive(Display)]` adds `Foo.display(self)` which returns a
+/// human-readable `Foo { field=value, … }` string for every declared
+/// field. Useful for logging and `print(Foo.display(value))`.
+#[derive(Display)]
+struct Vec3 {
+  x: number,
+  y: number,
+  z: number,
+}

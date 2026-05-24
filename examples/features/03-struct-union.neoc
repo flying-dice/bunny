@@ -1,0 +1,8 @@
+/// A struct union models a sum type as a TS-style union of struct
+/// identities. Each variant carries its own structured payload; the
+/// `_struct` brand discriminates at runtime.
+struct Cat { name: string }
+struct Dog { name: string }
+struct Fish { name: string }
+
+type Animal = Cat | Dog | Fish

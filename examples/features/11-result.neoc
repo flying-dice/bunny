@@ -1,0 +1,10 @@
+/// `Result<T, E>` is the canonical "value or error" type. `Ok(v)` wraps
+/// success; `Err(e)` wraps failure. The emitter inlines a local Lua
+/// prelude when any of `Result`, `Ok`, or `Err` is referenced.
+struct ParseError { input: string }
+
+export function parsePositive(s: string): Result<number, ParseError> {
+  local n = tonumber(s)
+  if n == nil or n <= 0 then return Err(ParseError.new({ input = s })) end
+  return Ok(n)
+}

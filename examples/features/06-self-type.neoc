@@ -1,0 +1,14 @@
+/// `Self` (capital S) is the type-level placeholder for the implementing
+/// struct inside a trait declaration or impl block. The codegen
+/// substitutes it with the target struct's name at emit time.
+trait Doubler {
+  double(self: Self): Self
+}
+
+struct Box { count: number }
+
+impl Doubler for Box {
+  double(self: Box): Box {
+    return Box.new({ count = self.count * 2 })
+  }
+}

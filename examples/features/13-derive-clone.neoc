@@ -1,0 +1,7 @@
+/// `#[derive(Clone)]` adds `Foo.clone(self)` which returns a deep
+/// copy of the struct, preserving the `_struct` brand and metatable.
+#[derive(Clone)]
+struct Point {
+  x: number,
+  y: number,
+}

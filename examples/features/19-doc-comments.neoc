@@ -1,0 +1,20 @@
+/// Rust-style triple-slash doc comments document the declaration that
+/// immediately follows. The LSP surfaces the body as markdown in hover
+/// popups and completion previews.
+///
+/// `///` lines and `/** … */` blocks are translated to Lua's `---` /
+/// `--[[ … ]]` forms during codegen so the documentation survives in
+/// the emitted source.
+struct DocumentedThing {
+  /// The unique identifier for this thing.
+  id: string,
+  /// A human-readable label.
+  label: string,
+}
+
+/// The canonical greeting routine.
+///
+/// Returns a friendly hello prefixed with the supplied name.
+export function greet(name: string): string {
+  return "Hello, " .. name
+}

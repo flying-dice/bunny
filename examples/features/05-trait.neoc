@@ -1,0 +1,17 @@
+/// Traits declare required methods and optional default-bodied ones.
+/// `impl Trait for Struct` provides the implementations; defaults are
+/// inherited unless the impl overrides them.
+trait Greet {
+  greeting(self: Self): string
+  shout(self: Self): string {
+    return Self.greeting(self) .. "!"
+  }
+}
+
+struct Person { name: string }
+
+impl Greet for Person {
+  greeting(self: Person): string {
+    return "Hello, " .. self.name
+  }
+}

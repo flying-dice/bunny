@@ -1,0 +1,12 @@
+/// Field-constraint macros weave runtime guards into the struct's
+/// `.new(data)` factory. A `.new` call with bad data raises a clear
+/// Lua error naming the field and the failing constraint.
+struct User {
+  #[minLength(1)]
+  #[maxLength(64)]
+  name: string,
+
+  #[minimum(0)]
+  #[maximum(150)]
+  age: number,
+}

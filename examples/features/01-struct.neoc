@@ -1,0 +1,7 @@
+/// A 2D point. The basic `struct` declaration: named fields with
+/// declared types, an auto-generated `.new(data)` factory, and an
+/// auto-injected `_struct` brand for runtime identity.
+struct Point {
+  x: number,
+  y: number,
+}

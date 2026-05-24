@@ -1,0 +1,7 @@
+/// `#[derive(Equals)]` adds `Foo.equals(a, b)` which returns structural
+/// equality across every declared field.
+#[derive(Equals)]
+struct Coord {
+  lat: number,
+  lng: number,
+}

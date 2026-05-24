@@ -1,0 +1,13 @@
+/// `#[test]` on an exported function registers it with the module's
+/// `__neoc_tests` table. `neoc test` discovers every registration
+/// across all `.neoc` files, runs each through `luau`, and reports
+/// pass/fail counts.
+#[test]
+export function addition_works(): void {
+  assert(1 + 1 == 2)
+}
+
+#[test]
+export function string_concat_works(): void {
+  assert("hello" .. " " .. "world" == "hello world")
+}
