@@ -1,6 +1,6 @@
 # neoc-compiler
 
-A Rust-flavoured source language for scripting runtimes. **Lua 5.4 is the first target**; the language surface and codegen are decoupled so other targets can plug in.
+A Rust-flavoured source language for scripting runtimes. **Lua 5.1 is the first target** — the lowest common denominator. Output runs unmodified on stock Lua 5.1 / 5.2 / 5.3 / 5.4 / 5.5, LuaJIT, and Luau. The language surface and codegen are decoupled so other targets can plug in.
 
 neoc adds `struct`, `impl`, `trait`, `match`, and `#[macro]` attributes on top of a Rust-flavoured body grammar — `let`, `if`, `for`, `while`, `break`, `continue`, `return`, the `?` operator, template strings, ternaries. The compiler emits one target file per `.neoc` source. The first-party Lua runtime that consumes the output — [neoc](https://github.com/flying-dice/neoc) — is a separate Rust + mlua project; nothing in this repo depends on it.
 
@@ -76,7 +76,7 @@ function apply(a, op, b)
 end
 ```
 
-Runs unchanged through `luau` or stock Lua 5.4.
+Runs unchanged through stock Lua 5.1 / 5.2 / 5.3 / 5.4 / 5.5, LuaJIT, or Luau.
 
 ## Build
 

@@ -75,7 +75,9 @@ while n < 5 do n = n + 1 end
 
 ### `continue`
 
-Lua has no `continue` keyword; the idiom is `goto continue` with a `::continue::` label just above the loop's `end`. The emitter synthesises the label only when the body actually contains a `continue` — so simple loops stay clean.
+Lua 5.1 has no `continue` keyword or `goto`/labels. The portable idiom is to wrap the body in `repeat … until true` and `break` out of the inner repeat — that aborts the current iteration and the outer loop's iterator advances. The wrapping is only added when the body actually contains a `continue`, so simple loops stay clean.
+
+When the same body also contains a real `break`, the emitter promotes `break` to a two-stage `__break = true; break` (the inner repeat is escaped, then a follow-up check after the repeat fires `break` on the outer loop). A `do … end` block scopes the `__break` flag so nested loops don't collide.
 
 ```neoc
 for i in 1..=10 {
@@ -88,17 +90,24 @@ for i in 1..=10 {
 →
 
 ```lua
-for i = 1, 10 do
-  if i == 3 then
-    goto continue
+do
+  local __break = false
+  for i = 1, 10 do
+    repeat
+      if i == 3 then
+        break
+      end
+      if i > 7 then
+        __break = true; break
+      end
+      total = total + i
+    until true
+    if __break then break end
   end
-  if i > 7 then
-    break
-  end
-  total = total + i
-  ::continue::
 end
 ```
+
+Runs unmodified on stock Lua 5.1 through 5.5, LuaJIT, and Luau — no `goto` required.
 
 ## Inference
 

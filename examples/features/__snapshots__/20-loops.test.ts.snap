@@ -9,8 +9,11 @@ exports[`20-loops: transpile produces the expected Lua shape 1`] = `
 --- intermediate sequence built. \`for x in <array>\` walks the array
 --- via \`ipairs\` and exposes the value (not the index).
 ---
---- \`continue\` synthesises a \`::continue::\` label at the bottom of the
---- loop body — Lua has no \`continue\` keyword, only \`goto\`.
+--- \`continue\` is faked by wrapping the body in \`repeat … until true\`
+--- and breaking out of the inner repeat — works on Lua 5.1 where
+--- \`goto\`/labels don't exist. A real \`break\` inside the same body
+--- becomes a two-stage \`__break\` flag so it still terminates the
+--- outer loop.
 
 function sumRange()
   local total = 0
@@ -51,15 +54,20 @@ end
 
 function skipThreeStopSeven()
   local total = 0
+  do
+  local __break = false
   for i = 1, 10 do
-    if i == 3 then
-      goto continue
-    end
-    if i > 7 then
-      break
-    end
-    total = total + i
-    ::continue::
+    repeat
+      if i == 3 then
+        break
+      end
+      if i > 7 then
+        __break = true; break
+      end
+      total = total + i
+    until true
+    if __break then break end
+  end
   end
   return total
 end

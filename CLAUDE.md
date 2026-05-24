@@ -2,7 +2,7 @@
 
 Guidance for Claude (and any LLM agent) working in the **neoc-compiler** repo.
 
-> neoc-compiler — a Rust-flavoured source language for scripting runtimes. Lua 5.4 is the first target (`.neoc` → `.lua`); the codegen layer is decoupled from the language surface so other targets can plug in. The compiler ships as `@flying-dice/neoc-compiler`; the language is `neoc`; the CLI is `neoc`; the matching Lua runtime is the separate `neoc` project (Rust + mlua).
+> neoc-compiler — a Rust-flavoured source language for scripting runtimes. Lua 5.1 is the first target (`.neoc` → `.lua`), chosen as the lowest common denominator so output runs on stock 5.1 / 5.2 / 5.3 / 5.4 / 5.5, LuaJIT, and Luau without modification. The codegen layer is decoupled from the language surface so other targets can plug in. The compiler ships as `@flying-dice/neoc-compiler`; the language is `neoc`; the CLI is `neoc`; the matching Lua runtime is the separate `neoc` project (Rust + mlua).
 
 ---
 

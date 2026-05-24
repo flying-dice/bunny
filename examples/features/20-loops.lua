@@ -48,15 +48,20 @@ end
 
 function skipThreeStopSeven()
   local total = 0
+  do
+  local __break = false
   for i = 1, 10 do
-    if i == 3 then
-      goto continue
-    end
-    if i > 7 then
-      break
-    end
-    total = total + i
-    ::continue::
+    repeat
+      if i == 3 then
+        break
+      end
+      if i > 7 then
+        __break = true; break
+      end
+      total = total + i
+    until true
+    if __break then break end
+  end
   end
   return total
 end

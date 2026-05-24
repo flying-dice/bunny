@@ -6,7 +6,7 @@ The neoc compiler splits into four modules with clean boundaries.
 zed/tree-sitter-neoc/             1. grammar (editor + tooling)
 src/neoc/ast/                     2. AST — typed node definitions
 src/neoc/parser/                  3. source text → AST
-src/neoc/codegen/lua/             4. AST → Lua 5.4
+src/neoc/codegen/lua/             4. AST → Lua 5.1 (LCD: 5.1+, LuaJIT, Luau)
 src/neoc/macros/                  macro system, owned by codegen
 src/neoc/compiler.ts              orchestrator (parse → macros → codegen)
 src/neoc/driver.ts                fs entry points (compileFile, buildProject)

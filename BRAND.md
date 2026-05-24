@@ -2,7 +2,7 @@
 
 ## What it is
 
-A Rust-flavoured Lua dialect. `.neoc` source compiles to `.lua` that runs on stock Lua 5.4 or any embedded runtime that hosts Lua — including [neoc](https://github.com/flying-dice/neoc), the Rust + mlua runtime the language was designed for.
+A Rust-flavoured source language for scripting runtimes. `.neoc` source compiles to a target dialect — Lua 5.1 is the first, chosen as the lowest common denominator so output runs unmodified on stock Lua 5.1 / 5.2 / 5.3 / 5.4 / 5.5, LuaJIT, Luau, and embedded runtimes that host Lua — including [neoc](https://github.com/flying-dice/neoc), the Rust + mlua runtime the language was designed for.
 
 ## What it sounds like
 

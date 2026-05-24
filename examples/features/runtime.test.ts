@@ -9,7 +9,12 @@ import { dirname, resolve } from "node:path";
 const here = dirname(fileURLToPath(import.meta.url));
 
 test("generated Lua passes feature runtime + snapshot tests", async () => {
-  const lua = Bun.which("lua") ?? Bun.which("lua5.4");
+  const lua = Bun.which("lua")
+    ?? Bun.which("luajit")
+    ?? Bun.which("lua5.4")
+    ?? Bun.which("lua5.3")
+    ?? Bun.which("lua5.2")
+    ?? Bun.which("lua5.1");
   if (!lua) {
     console.warn("`lua` not on PATH — skipping runtime tests. Install via `brew install lua`.");
     return;

@@ -48,9 +48,19 @@ function emitStatement(node: N.AstNode): string {
     case "while_statement":
       return emitWhile(node as N.WhileStatementNode);
     case "break_statement":
-      return "break";
+      // When the enclosing loop wraps its body in `repeat … until
+      // true` to fake `continue` on Lua 5.1, a bare `break` would
+      // only escape the inner repeat. Promote it to a two-stage
+      // form (flag + break) so the outer loop terminates too.
+      return loopStackTopUsesContinue() ? "__break = true; break" : "break";
     case "continue_statement":
-      return "goto continue";
+      // Lua 5.1 has no `goto`/labels. The portable idiom is to wrap
+      // the body in `repeat … until true` and `break` out of the
+      // inner repeat — that aborts the current iteration and the
+      // outer loop's iterator advances. The wrapping is added by
+      // the enclosing loop emitter; the `continue` itself is just
+      // a `break` of the inner repeat.
+      return "break";
     case "return_statement":
       return emitReturn(node as N.ReturnStatementNode);
     case "statement_block":
@@ -82,37 +92,135 @@ function emitStatement(node: N.AstNode): string {
 function emitFor(node: N.ForStatementNode): string {
   const name = node.name.text;
   const iterable = node.iterable as N.AstNode;
-  const bodyText = emitInnerBlock(node.body as N.StatementBlockNode);
-  const bodyWithContinue = withContinueLabel(bodyText);
+  const header = iterableHeader(name, iterable);
+  return wrapLoop(node.body, (body) => `${header} do\n${indent(body)}\nend`);
+}
 
+function emitWhile(node: N.WhileStatementNode): string {
+  const cond = emitExpression(node.condition as N.AstNode);
+  return wrapLoop(node.body as N.AstNode[] | N.AstNode, (body) =>
+    `while ${cond} do\n${indent(body)}\nend`,
+  );
+}
+
+function iterableHeader(name: string, iterable: N.AstNode): string {
   if (iterable.kind === "range_expression") {
     const r = iterable as N.RangeExpressionNode;
     const start = emitExpression(r.start as N.AstNode);
     const endExpr = emitExpression(r.end as N.AstNode);
     const inclusive = isInclusiveRange(r);
     const upper = inclusive ? endExpr : `${endExpr} - 1`;
-    return `for ${name} = ${start}, ${upper} do\n${indent(bodyWithContinue)}\nend`;
+    return `for ${name} = ${start}, ${upper}`;
   }
-
-  return `for _, ${name} in ipairs(${emitExpression(iterable)}) do\n${indent(bodyWithContinue)}\nend`;
-}
-
-function emitWhile(node: N.WhileStatementNode): string {
-  const cond = emitExpression(node.condition as N.AstNode);
-  const bodyNode = node.body as N.AstNode[] | N.AstNode;
-  const bodyText = emitBranch(bodyNode);
-  return `while ${cond} do\n${indent(withContinueLabel(bodyText))}\nend`;
+  return `for _, ${name} in ipairs(${emitExpression(iterable)})`;
 }
 
 /**
- * Lua has no `continue` keyword; the idiom is `goto continue` with
- * a `::continue::` label just before the loop's `end`. We only emit
- * the label when the body actually uses `continue`, so the common
- * loop stays clean.
+ * Render a loop given its body node and a function that wraps the
+ * already-rendered body into the loop's syntax (`for … do …
+ * end`, `while … do … end`).
+ *
+ * Pre-scans the immediate body (NOT nested loops, which have their
+ * own contexts) for `break_statement` / `continue_statement` so the
+ * emitter knows whether to wrap the body in `repeat … until true`
+ * and whether `break` needs the two-stage `__break` flag form. The
+ * scan stops at any nested for / while so an inner loop's
+ * `continue` doesn't make us wrap the outer.
+ *
+ * Three shapes are possible:
+ *
+ *   - No `continue` anywhere → emit the loop straight, no wrapping.
+ *   - `continue` present, no `break` → wrap body in
+ *     `repeat … until true`. `continue` lowers to inner `break`.
+ *   - `continue` + `break` → wrap body in `repeat … until true`
+ *     AND open a `do local __break = false … end` block around the
+ *     loop. `break` becomes `__break = true; break`; after the
+ *     repeat ends we check `if __break then break end`.
  */
-function withContinueLabel(bodyText: string): string {
-  if (!/\bgoto continue\b/.test(bodyText)) return bodyText;
-  return `${bodyText}\n::continue::`;
+function wrapLoop(
+  bodyNode: N.AstNode[] | N.AstNode,
+  wrap: (renderedBody: string) => string,
+): string {
+  const usesContinue = bodyHasOwnContinue(bodyNode);
+  const usesBreak = usesContinue && bodyHasOwnBreak(bodyNode);
+
+  loopStack.push({ usesContinue });
+  let bodyText: string;
+  try {
+    bodyText = renderLoopBody(bodyNode);
+  } finally {
+    loopStack.pop();
+  }
+
+  if (!usesContinue) {
+    return wrap(bodyText);
+  }
+
+  const repeatWrapped = `repeat\n${indent(bodyText)}\nuntil true`;
+  if (!usesBreak) {
+    return wrap(repeatWrapped);
+  }
+
+  const innerWithCheck = `${repeatWrapped}\nif __break then break end`;
+  return `do\nlocal __break = false\n${wrap(innerWithCheck)}\nend`;
+}
+
+function renderLoopBody(bodyNode: N.AstNode[] | N.AstNode): string {
+  if (Array.isArray(bodyNode)) {
+    return bodyNode.map((s) => emitStatement(s)).filter(Boolean).join("\n");
+  }
+  if (bodyNode.kind === "statement_block") {
+    return emitInnerBlock(bodyNode as N.StatementBlockNode);
+  }
+  return emitStatement(bodyNode);
+}
+
+// ---------------------------------------------------------------------------
+// Loop-context stack (for break / continue inside nested loops)
+// ---------------------------------------------------------------------------
+
+interface LoopContext { usesContinue: boolean }
+const loopStack: LoopContext[] = [];
+
+function loopStackTopUsesContinue(): boolean {
+  return loopStack.length > 0 && loopStack[loopStack.length - 1]!.usesContinue;
+}
+
+function bodyHasOwnContinue(bodyNode: N.AstNode[] | N.AstNode): boolean {
+  return scanForKind(bodyNode, "continue_statement");
+}
+
+function bodyHasOwnBreak(bodyNode: N.AstNode[] | N.AstNode): boolean {
+  return scanForKind(bodyNode, "break_statement");
+}
+
+/**
+ * Walk a body looking for direct uses of `targetKind` that belong
+ * to the enclosing loop. Recurses into compound statements but
+ * stops at any nested loop (`for_statement`, `while_statement`) —
+ * a `break` / `continue` inside an inner loop is the inner loop's
+ * problem.
+ */
+function scanForKind(node: N.AstNode[] | N.AstNode | undefined, targetKind: string): boolean {
+  if (!node) return false;
+  if (Array.isArray(node)) {
+    return node.some((n) => scanForKind(n, targetKind));
+  }
+  if (node.kind === targetKind) return true;
+  if (node.kind === "for_statement" || node.kind === "while_statement") return false;
+  const bag = node as unknown as Record<string, unknown>;
+  for (const key of Object.keys(bag)) {
+    if (["kind", "text", "startIndex", "endIndex", "startPosition", "endPosition"].includes(key)) continue;
+    const v = bag[key];
+    if (Array.isArray(v)) {
+      for (const c of v) {
+        if (c && typeof c === "object" && scanForKind(c as N.AstNode, targetKind)) return true;
+      }
+    } else if (v && typeof v === "object") {
+      if (scanForKind(v as N.AstNode, targetKind)) return true;
+    }
+  }
+  return false;
 }
 
 function isInclusiveRange(node: N.RangeExpressionNode): boolean {
@@ -529,4 +637,5 @@ function indent(text: string): string {
  * fresh per function so generated names don't drift across files. */
 export function resetEmitterState(): void {
   tryCounter = 0;
+  loopStack.length = 0;
 }

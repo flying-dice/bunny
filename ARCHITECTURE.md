@@ -17,7 +17,7 @@ Typed AST  (src/neoc/ast/index.ts, nodes.generated.ts)
 Typed AST with body text rewritten for Lua
    │
    ▼  emit + macros  (src/neoc/codegen/lua/index.ts, src/neoc/macros/*)
-Lua 5.4 source string
+Target source string (Lua 5.1 today)
 ```
 
 Every transformation is **single-purpose** and **read-only relative to its predecessor**. The parser never produces Lua; the codegen never re-parses; macros never mutate the AST.

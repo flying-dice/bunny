@@ -1,5 +1,7 @@
 /**
- * Lua 5.4 codegen — neoc AST → `.lua` source.
+ * Lua codegen — neoc AST → `.lua` source. Targets Lua 5.1 as the
+ * lowest common denominator: emitted code runs unmodified on stock
+ * 5.1 / 5.2 / 5.3 / 5.4 / 5.5, LuaJIT, and Luau.
  *
  * Layout per emitted module:
  *

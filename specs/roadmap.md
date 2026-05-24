@@ -4,7 +4,7 @@
 
 neoc is a **Rust-flavoured source language** for scripting runtimes. The compiler owns the entire grammar — declarations, statements, expressions, and control flow — and emits target code through an AST-driven translator. Each target backend lives behind its own codegen module; the language surface is target-agnostic.
 
-**Lua 5.4 is the first target.** Earlier drafts framed neoc as a thin Lua shell that delegated body syntax to Lua and treated function bodies as opaque text. That direction was abandoned: keeping inference, diagnostics, and editor tooling honest required a real body grammar, and tying the source surface to one target ruled out the others. Today the user writes neoc end-to-end (`let`, `if (…) { … }`, `||`, `for x in …`, `while (…)`, `break`, `continue`, struct / impl / trait / match …) and the active codegen produces the equivalent in whichever target dialect was selected.
+**Lua 5.1 is the first target**, chosen as the lowest common denominator so emitted code runs unmodified on stock 5.1 / 5.2 / 5.3 / 5.4 / 5.5, LuaJIT, and Luau. Earlier drafts framed neoc as a thin Lua shell that delegated body syntax to Lua and treated function bodies as opaque text. That direction was abandoned: keeping inference, diagnostics, and editor tooling honest required a real body grammar, and tying the source surface to one target ruled out the others. Today the user writes neoc end-to-end (`let`, `if (…) { … }`, `||`, `for x in …`, `while (…)`, `break`, `continue`, struct / impl / trait / match …) and the active codegen produces the equivalent in whichever target dialect was selected.
 
 The bar for any new neoc keyword is:
 
@@ -14,7 +14,7 @@ Bodies are no longer opaque — there's no escape hatch back to raw target synta
 
 ## Implemented today
 
-The compiler's only shipping target is Lua 5.4. The "Lua output" column shows what each construct emits through the current codegen; a future target backend would substitute its own column.
+The compiler's only shipping target is Lua 5.1 (LCD). The "Lua output" column shows what each construct emits through the current codegen; a future target backend would substitute its own column.
 
 | Construct | Lua output |
 | --- | --- |
@@ -30,7 +30,7 @@ The compiler's only shipping target is Lua 5.4. The "Lua output" column shows wh
 | `let x: T = expr` / `const x = expr` | `local x = expr` (annotation is the type-check anchor; not emitted) |
 | `if (cond) { … } else if (…) { … } else { … }` | `if cond then … elseif … then … else … end` |
 | `for x in 0..n { … }` / `for x in arr { … }` | Numeric `for x = 0, n - 1` for ranges; `for _, x in ipairs(arr)` otherwise |
-| `while (cond) { … }`, `break`, `continue` | `while cond do … end` (`continue` lowers via `goto continue` + label) |
+| `while (cond) { … }`, `break`, `continue` | `while cond do … end` (`continue` lowers via `repeat … until true` so it works on Lua 5.1) |
 | `arr[i]` | `arr[(i) + 1]` so 0-based access lines up with Lua's 1-based tables |
 | `\`hello ${name}\`` template strings | `"hello " .. tostring(name)` concat |
 | `null` / `undefined` | `nil` |
