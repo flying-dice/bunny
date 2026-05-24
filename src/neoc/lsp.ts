@@ -29,11 +29,13 @@
  *     into a `WorkspaceEdit`. Skips occurrences inside string
  *     literals and line comments.
  *   - `textDocument/inlayHint` — ghost-text labels rendered inline by
- *     the editor. Currently emits parameter-name hints in front of
- *     every argument at a recognised call site (`Product.new(…)`,
- *     `tag(…)`, `Foo.method(…)`), drawn from the callee's parameter
- *     list. Hints are skipped for unresolved callees so the editor
- *     never shows wrong labels.
+ *     the editor. Emits parameter-name hints in front of every argument
+ *     at a recognised call site (`Product.new(…)`, `tag(…)`,
+ *     `Foo.method(…)`), drawn from the callee's parameter list, and
+ *     inferred-type hints (`: number`, `: Product`) after every `let`
+ *     binding that lacks an explicit annotation. Hints are skipped for
+ *     unresolved callees and `unknown` types so the editor never shows
+ *     wrong or noisy labels.
  *   - `textDocument/codeLens` — clickable labels above declarations.
  *     Emits a "Run test" lens above every `#[test]` function, and an
  *     "N references" lens above every struct, trait, and function with
@@ -44,8 +46,13 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parse } from "./parser/index.ts";
 import * as M from "./ast/index.ts";
+import type * as N from "./ast/nodes.generated.ts";
 import { transpile } from "./compiler.ts";
 import { formatSource } from "./fmt.ts";
+import { buildModuleScope } from "./types/env.ts";
+import { buildStructMap, buildImplMap, type InferCtx } from "./types/infer.ts";
+import { inferBody } from "./types/walk.ts";
+import { display, parseType } from "./types/type.ts";
 
 interface JsonRpcMessage {
   jsonrpc: "2.0";
@@ -1913,15 +1920,17 @@ function escapeRegex(s: string): string {
 // ----------------------------------------------------------------------------
 
 /**
- * Compute parameter-name inlay hints for every recognised call site
- * whose argument list overlaps `range`. For each argument, the hint
- * is anchored to the argument's start offset and labelled with the
- * callee's parameter name followed by a colon. Calls whose callee
- * can't be resolved to a function, struct `.new`, or impl method
- * emit no hints.
+ * Compute inlay hints that overlap `range`. Two categories are emitted:
+ *
+ *   - Parameter-name hints in front of every argument at a recognised
+ *     call site. Calls whose callee can't be resolved to a function,
+ *     struct `.new`, or impl method emit no hints.
+ *   - Type hints after every `let` binding whose source has no explicit
+ *     type annotation, drawn from `inferBody`. Bindings whose inferred
+ *     type is `unknown` produce no hint.
  *
  * Pure: same `(doc, range, workspace)` produces the same hints.
- * Returns `[]` when the document didn't parse or no calls are visible.
+ * Returns `[]` when the document didn't parse or nothing visible.
  */
 export function inlayHintsFor(
   doc: DocState,
@@ -1957,6 +1966,142 @@ export function inlayHintsFor(
       });
     }
   }
+
+  for (const hint of letBindingTypeHints(doc, rangeStart, rangeEnd)) {
+    out.push(hint);
+  }
+  return out;
+}
+
+/**
+ * Yield one `: <inferred type>` hint per `let` binding whose name lands
+ * inside `[rangeStart, rangeEnd)` and that doesn't already carry an
+ * explicit type annotation in source. The walker has already inferred
+ * the binding's type as part of `inferBody`; this just looks the result
+ * up by the identifier's `startIndex` and renders it via `display`.
+ *
+ * Bindings whose inferred type is `unknown` produce no hint — surfacing
+ * `: unknown<…>` clutters the editor without telling the user anything.
+ */
+function* letBindingTypeHints(
+  doc: DocState,
+  rangeStart: number,
+  rangeEnd: number,
+): Generator<InlayHint> {
+  if (!doc.module) return;
+  const ctx: InferCtx = {
+    env: buildModuleScope(doc.module),
+    structs: buildStructMap(doc.module),
+    impls: buildImplMap(doc.module),
+  };
+
+  for (const body of bodiesOverlappingRange(doc.module, rangeStart, rangeEnd)) {
+    seedParams(ctx, body.params);
+    let inferred: ReturnType<typeof inferBody>;
+    try {
+      inferred = inferBody(body.bodyAst, ctx);
+    } finally {
+      ctx.env.pop();
+    }
+    for (const decl of collectVariableDeclarations(body.bodyAst)) {
+      if (decl.type) continue; // explicit annotation already shown in source
+      const nameStart = decl.name.startIndex;
+      if (nameStart < rangeStart || nameStart >= rangeEnd) continue;
+      const type = inferred.types.get(nameStart);
+      if (!type || type.kind === "unknown") continue;
+      yield {
+        position: offsetToPosition(doc.text, decl.name.endIndex),
+        label: `: ${display(type)}`,
+        kind: InlayHintKind.Type,
+        paddingLeft: true,
+      };
+    }
+  }
+}
+
+interface BodyEntry {
+  bodyAst: N.StatementBlockNode;
+  /** Verbatim parameter text (parens stripped) for scope seeding. */
+  params: string;
+}
+
+/**
+ * Enumerate every function / impl-method / trait-default body whose
+ * statement block overlaps the visible range, paired with the params
+ * text needed to seed the body's lexical scope.
+ */
+function* bodiesOverlappingRange(
+  module: M.Module,
+  rangeStart: number,
+  rangeEnd: number,
+): Generator<BodyEntry> {
+  for (const part of module.parts) {
+    if (part.kind === "function") {
+      if (part.bodyAst && overlaps(part.bodyAst, rangeStart, rangeEnd)) {
+        yield { bodyAst: part.bodyAst, params: part.params };
+      }
+    } else if (part.kind === "impl") {
+      for (const m of part.methods) {
+        if (m.bodyAst && overlaps(m.bodyAst, rangeStart, rangeEnd)) {
+          yield { bodyAst: m.bodyAst, params: m.params };
+        }
+      }
+    } else if (part.kind === "trait") {
+      for (const m of part.methods) {
+        if (m.bodyAst && overlaps(m.bodyAst, rangeStart, rangeEnd)) {
+          yield { bodyAst: m.bodyAst, params: m.params };
+        }
+      }
+    }
+  }
+}
+
+function overlaps(
+  node: N.StatementBlockNode,
+  rangeStart: number,
+  rangeEnd: number,
+): boolean {
+  return node.endIndex > rangeStart && node.startIndex < rangeEnd;
+}
+
+/**
+ * Push a fresh scope onto `ctx.env` and define every parameter from
+ * `paramsText` in it. Callers must `ctx.env.pop()` once they're done
+ * walking the body — handled by `letBindingTypeHints` via try/finally.
+ */
+function seedParams(ctx: InferCtx, paramsText: string): void {
+  ctx.env.push();
+  for (const p of parseParamList(paramsText)) {
+    ctx.env.define(p.name, { type: parseType(p.type), kind: "param" });
+  }
+}
+
+/**
+ * Walk a statement block (and any nested blocks / expressions) and
+ * yield every `variable_declaration` node encountered. The walk is
+ * generic over node shape — any object with a string `kind` field is
+ * treated as an AST node and recursed into.
+ */
+function collectVariableDeclarations(
+  root: N.StatementBlockNode,
+): N.VariableDeclarationNode[] {
+  const out: N.VariableDeclarationNode[] = [];
+  const visit = (node: unknown): void => {
+    if (!node || typeof node !== "object") return;
+    const bag = node as Record<string, unknown> & { kind?: unknown };
+    if (bag.kind === "variable_declaration") {
+      out.push(node as N.VariableDeclarationNode);
+    }
+    for (const key of Object.keys(bag)) {
+      if (key === "kind" || key === "text" || key === "startPosition" || key === "endPosition") {
+        continue;
+      }
+      const v = bag[key];
+      if (Array.isArray(v)) for (const c of v) visit(c);
+      else if (v && typeof v === "object") visit(v);
+    }
+  };
+  visit(root);
   return out;
 }
 
