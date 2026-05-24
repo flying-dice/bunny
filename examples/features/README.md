@@ -39,3 +39,19 @@ neoc build -s '*.neoc'
 | 19 | `///` and `/** */` doc comments | [19-doc-comments.neoc](19-doc-comments.neoc) | [19-doc-comments.lua](19-doc-comments.lua) |
 
 The full language spec lives in [`specs/`](../../specs/). Each row in the table above has a matching `specs/<feature>.md` + `specs/ide-<feature>.md` pair.
+
+## Tests for the generated Lua
+
+[`run-tests.lua`](run-tests.lua) exercises every `.lua` file in this directory. For each feature:
+
+- **A runtime test** loads the generated `.lua` and asserts the compiled functions behave correctly (struct factories stamp the brand, `match` returns the right arm, `Result` shapes, etc.).
+- **A shape / snapshot test** reads the `.lua` as text and asserts that specific anchor lines are still produced by the codegen — catches regressions in the emitter without depending on a separate snapshot file.
+
+Run them directly:
+
+```
+cd examples/features
+lua run-tests.lua
+```
+
+[`runtime.test.ts`](runtime.test.ts) wraps the same runner so `bun test` in the project root picks it up automatically. It skips with a warning when `lua` isn't on PATH (`brew install lua`).

@@ -1,14 +1,22 @@
 --- Range expressions build a sequence of integers.
 --- `a..b` is exclusive on the right; `a..=b` is inclusive.
 --- Lowers to a Lua sequence-building IIFE.
-export function exclusive(): table {
-  return 0..5
-}
+---
+--- The functions below return Lua tables (sequences of integers);
+--- neoc's type surface doesn't yet name those, so they're typed as
+--- `string` here purely to satisfy the parser. The actual returned
+--- values are tables, as the tests confirm.
+function exclusive()
+  return (function() local r = {} for i = 0, 5 - 1 do r[#r + 1] = i end return r end)()
+end
 
-export function inclusive(): table {
-  return 0..=5
-}
 
-export function withBounds(lo: number, hi: number): table {
-  return lo..hi
-}
+function inclusive()
+  return (function() local r = {} for i = 0, 5 do r[#r + 1] = i end return r end)()
+end
+
+
+function withBounds(lo, hi)
+  return (function() local r = {} for i = lo, hi - 1 do r[#r + 1] = i end return r end)()
+end
+

@@ -1,6 +1,10 @@
 --- A struct union models a sum type as a TS-style union of struct
 --- identities. Each variant carries its own structured payload; the
 --- `_struct` brand discriminates at runtime.
+---
+--- Note: a `type Animal = Cat | Dog | Fish` alias is a TS-level
+--- type-system construct and isn't emitted to Lua — runtime
+--- discrimination relies on the per-variant `_struct` brand below.
 local Cat = {}
 Cat.__index = Cat
 function Cat.new(data)
@@ -25,5 +29,3 @@ function Fish.new(data)
   return data
 end
 
-
-type Animal = Cat | Dog | Fish
