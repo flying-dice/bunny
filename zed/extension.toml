@@ -19,5 +19,5 @@ languages = ["neoc"]
 # (initialised by `setup-grammar.sh`).
 [grammars.neoc]
 repository = "file:///Users/jonathanturnock/Projects/bun-oas/zed/tree-sitter-neoc"
-commit = "717ce6e54e512aadbfe9f46e953b08572cb9757d"
+commit = "eedb39d53073d4d8777cf18acd0f9321ba81f1bb"
 path = ""
